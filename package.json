@@ -23,7 +23,9 @@
     "sample:gpx": "node scripts/make-sample-gpx.ts",
     "sample:photos": "uv run --no-project --with pillow --with piexif --with pillow-heif python scripts/make-photos.py",
     "demo:capture": "node scripts/capture-demo.mjs",
-    "demo:media": "uv run --no-project --with av --with pillow python scripts/make-demo-media.py"
+    "demo:media": "uv run --no-project --with av --with pillow python scripts/make-demo-media.py",
+    "android:sync": "pnpm build && cap sync android",
+    "android:apk": "pnpm android:sync && cd android && gradlew assembleDebug"
   },
   "dependencies": {
     "@capacitor-community/background-geolocation": "^1.2.26",
