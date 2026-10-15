@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { TrackPoint } from '../src/import';
 import { bbox, haversine } from '../src/track/geo';
-import { computeStats, elevationStats, maxRollingMedian } from '../src/track/stats';
+import {
+  computeStats,
+  elevationStats,
+  maxRollingMedian,
+  smoothElevation,
+} from '../src/track/stats';
 import { M_PER_DEG } from './helpers';
 
 const T0 = Date.UTC(2026, 5, 1, 8);
@@ -93,8 +98,14 @@ describe('computeStats', () => {
 });
 
 describe('elevationStats', () => {
+  /** Points 100 m apart (beyond the smoothing window), so hysteresis is tested on its own. */
   const pts = (eles: (number | null)[]) =>
-    eles.map((ele): TrackPoint => ({ lat: 46, lon: 7, ele, time: null }));
+    eles.map((ele, i): TrackPoint => ({
+      lat: 46 + (i * 100) / M_PER_DEG,
+      lon: 7,
+      ele,
+      time: null,
+    }));
 
   it('filters GPS altitude noise below the threshold', () => {
     const noisy = pts([100, 101, 99, 101, 100, 102, 100, 101]);
@@ -113,6 +124,31 @@ describe('elevationStats', () => {
       minElevation: 100,
       maxElevation: 200,
     });
+  });
+
+  it('collapses jitter recorded while standing still', () => {
+    // 200 samples at one spot, ±4 m of altitude noise: well above the 3 m hysteresis alone.
+    const still = Array.from({ length: 200 }, (_, i): TrackPoint => ({
+      lat: 46,
+      lon: 7,
+      ele: 1500 + (i % 2 ? 4 : -4),
+      time: null,
+    }));
+    expect(elevationStats(still)).toMatchObject({ elevationGain: 0, elevationLoss: 0 });
+  });
+
+  it('removes noise from a climb sampled every few metres', () => {
+    // 1 km at 10 % grade, a point every 5 m, ±2 m of zig-zag noise: true gain 100 m.
+    const climb = Array.from({ length: 201 }, (_, i): TrackPoint => ({
+      lat: 46 + (i * 5) / M_PER_DEG,
+      lon: 7,
+      ele: 1000 + i * 0.5 + (i % 2 ? 2 : -2),
+      time: null,
+    }));
+    const { elevationGain, elevationLoss } = elevationStats(climb);
+    expect(elevationGain).toBeGreaterThan(90);
+    expect(elevationGain).toBeLessThan(102);
+    expect(elevationLoss).toBe(0);
   });
 
   it('skips missing elevations and returns nulls when there are none', () => {
@@ -138,5 +174,21 @@ describe('maxRollingMedian', () => {
 
   it('finds a sustained peak', () => {
     expect(maxRollingMedian([3, 3, 8, 8, 8, 3, 3], 5)).toBe(8);
+  });
+});
+
+describe('smoothElevation', () => {
+  it('averages by along-track distance and keeps nulls', () => {
+    const p = (m: number, ele: number | null): TrackPoint => ({
+      lat: 46 + m / M_PER_DEG,
+      lon: 7,
+      ele,
+      time: null,
+    });
+    const out = smoothElevation([p(0, 10), p(10, 20), p(20, null), p(100, 50)], 15);
+    expect(out[0]).toBeCloseTo(15, 6); // 0 m and 10 m
+    expect(out[1]).toBeCloseTo(15, 6); // 0, 10 (20 m point has no elevation)
+    expect(out[2]).toBeNull();
+    expect(out[3]).toBe(50);
   });
 });

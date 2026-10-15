@@ -1,12 +1,17 @@
 import type { TrackPoint } from '../import/types';
 import { haversine } from './geo';
 
-/** Segments slower than this count as stopped (0.5 m/s = 1.8 km/h). */
-export const MOVING_SPEED_THRESHOLD = 0.5;
+/**
+ * Segments slower than this count as stopped (0.3 m/s ≈ 1.1 km/h). Steep hiking can be as slow as
+ * 0.35 m/s horizontally, so a higher threshold would drop real climbing from moving time.
+ */
+export const MOVING_SPEED_THRESHOLD = 0.3;
 /** Gaps longer than this (auto-pause, device off) never count as moving time. */
 export const MAX_MOVING_GAP_S = 5 * 60;
 /** Elevation must change by at least this much before it counts as gain or loss. */
 export const ELEVATION_THRESHOLD_M = 3;
+/** Elevation is averaged over ±this many metres along the track before gain/loss are counted. */
+export const ELEVATION_SMOOTHING_M = 30;
 /** Number of consecutive segments whose median speed is used for max speed. */
 export const MAX_SPEED_WINDOW = 5;
 
@@ -97,8 +102,12 @@ function median(values: readonly number[]): number {
 }
 
 /**
- * Gain and loss with hysteresis: elevation only counts once it moves at least
- * ELEVATION_THRESHOLD_M away from the last reference point, which filters GPS altitude noise.
+ * Gain and loss in two steps, to filter GPS altitude noise:
+ * 1. average elevation over ±ELEVATION_SMOOTHING_M along the track (by distance, not by point
+ *    count, so a long stop full of jittery samples collapses into one value), then
+ * 2. hysteresis: elevation only counts once it moves ELEVATION_THRESHOLD_M away from the last
+ *    reference value.
+ * Min and max use the raw values, as recorded.
  */
 export function elevationStats(points: readonly TrackPoint[]) {
   let gain = 0;
@@ -111,6 +120,10 @@ export function elevationStats(points: readonly TrackPoint[]) {
     if (ele === null) continue;
     min = Math.min(min, ele);
     max = Math.max(max, ele);
+  }
+
+  for (const ele of smoothElevation(points, ELEVATION_SMOOTHING_M)) {
+    if (ele === null) continue;
     if (ref === null) {
       ref = ele;
     } else if (ele - ref >= ELEVATION_THRESHOLD_M) {
@@ -129,4 +142,45 @@ export function elevationStats(points: readonly TrackPoint[]) {
     minElevation: hasEle ? min : null,
     maxElevation: hasEle ? max : null,
   };
+}
+
+/**
+ * Mean elevation of all points within ±halfWindow metres of along-track distance. O(n) with a
+ * sliding window, since cumulative distance never decreases.
+ */
+export function smoothElevation(
+  points: readonly TrackPoint[],
+  halfWindow: number,
+): (number | null)[] {
+  const dist: number[] = [0];
+  for (let i = 1; i < points.length; i++) {
+    dist.push(dist[i - 1]! + haversine(points[i - 1]!, points[i]!));
+  }
+
+  const out: (number | null)[] = [];
+  let lo = 0;
+  let hi = 0; // window is [lo, hi)
+  let sum = 0;
+  let count = 0;
+  for (let i = 0; i < points.length; i++) {
+    const d = dist[i]!;
+    while (hi < points.length && dist[hi]! <= d + halfWindow) {
+      const e = points[hi]!.ele;
+      if (e !== null) {
+        sum += e;
+        count++;
+      }
+      hi++;
+    }
+    while (dist[lo]! < d - halfWindow) {
+      const e = points[lo]!.ele;
+      if (e !== null) {
+        sum -= e;
+        count--;
+      }
+      lo++;
+    }
+    out.push(points[i]!.ele === null || count === 0 ? null : sum / count);
+  }
+  return out;
 }
