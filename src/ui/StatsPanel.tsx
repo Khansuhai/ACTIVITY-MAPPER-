@@ -51,7 +51,7 @@ export function StatsPanel({ track, stats, fileName }: StatsPanelProps) {
         ))}
       </dl>
 
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-slate-400">
         {fileName} · {track.source.toUpperCase()} · {stats.pointCount.toLocaleString('en-US')}{' '}
         points
         {stats.elapsedTime === null && ' · no timestamps, so time and speed are unavailable'}

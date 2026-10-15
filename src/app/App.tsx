@@ -240,7 +240,7 @@ export function App() {
           <button
             type="button"
             onClick={() => inputRef.current?.click()}
-            className="rounded-md bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-300"
+            className="rounded-md bg-orange-700 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-300"
           >
             {loaded ? 'Open another file' : 'Open activity file'}
           </button>
@@ -343,7 +343,7 @@ export function App() {
           </select>
         </label>
 
-        <p className="mt-auto text-xs text-slate-500">
+        <p className="mt-auto text-xs text-slate-400">
           🔒 Your files are processed in this browser and never uploaded.
         </p>
       </aside>

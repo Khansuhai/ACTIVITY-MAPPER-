@@ -202,7 +202,7 @@ export function ExportPanel({ base, length, fileName }: ExportPanelProps) {
               type="button"
               onClick={() => void start()}
               disabled={!base}
-              className="w-full rounded-md bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-300 disabled:opacity-40"
+              className="w-full rounded-md bg-orange-700 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-300 disabled:opacity-40"
             >
               Export {width}×{height} MP4
             </button>

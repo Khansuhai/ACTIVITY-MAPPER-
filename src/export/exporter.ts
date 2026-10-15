@@ -139,6 +139,9 @@ export async function exportVideo(
       // No fades: every frame shows only fully loaded, fully opaque content.
       fadeDuration: 0,
       maxPitch: 85,
+      // Styles come from our fixed, trusted registry: skip re-validating their large JSON on the
+      // main thread (a big part of start-up blocking time, per Lighthouse).
+      validateStyle: false,
       canvasContextAttributes: { preserveDrawingBuffer: true, antialias: true },
       center: timeline.at(0).camera.center,
       zoom: timeline.at(0).camera.zoom,

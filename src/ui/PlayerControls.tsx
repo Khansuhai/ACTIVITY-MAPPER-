@@ -24,22 +24,46 @@ export function PlayerControls({ timeline }: PlayerControlsProps) {
   };
 
   useEffect(() => {
+    // Space: play/pause. Left/Right: back/forward 5 s (1 s with Shift). Home/End: start/end.
     const onKey = (e: KeyboardEvent) => {
-      if (e.code !== 'Space' || isEditable(e.target)) return;
-      e.preventDefault();
+      if (isEditable(e.target) || e.altKey || e.ctrlKey || e.metaKey) return;
       const s = usePlayer.getState();
-      if (s.playing) s.pause();
-      else {
-        if (s.time >= duration) s.seek(0);
-        s.play();
+      const step = e.shiftKey ? 1 : 5;
+      switch (e.key) {
+        case ' ':
+          if (s.playing) s.pause();
+          else {
+            if (s.time >= duration) s.seek(0);
+            s.play();
+          }
+          break;
+        case 'ArrowLeft':
+          s.seek(Math.max(0, s.time - step));
+          break;
+        case 'ArrowRight':
+          s.seek(Math.min(duration, s.time + step));
+          break;
+        case 'Home':
+          s.seek(0);
+          break;
+        case 'End':
+          s.seek(duration);
+          break;
+        default:
+          return;
       }
+      e.preventDefault();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [duration]);
 
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-800 bg-slate-950 px-4 py-3">
+    <div
+      role="group"
+      aria-label="Player (Space: play or pause, arrow keys: seek 5 seconds, Home and End: start and end)"
+      className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-800 bg-slate-950 px-4 py-3"
+    >
       <button
         type="button"
         onClick={toggle}

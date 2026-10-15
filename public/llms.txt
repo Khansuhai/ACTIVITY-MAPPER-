@@ -1,0 +1,13 @@
+# OpenFlyover
+
+> Free, open-source web app that turns a GPS activity (GPX, TCX, FIT, KML) and photos into a
+> cinematic 3D flyover video, entirely in the browser. Nothing is uploaded. MIT licence.
+
+## Docs
+
+- [README](https://github.com/Khansuhai/ACTIVITY-MAPPER-/blob/main/README.md): features, browser support, data sources
+- [Technical decisions](https://github.com/Khansuhai/ACTIVITY-MAPPER-/blob/main/docs/DECISIONS.md): why it works the way it does
+
+## Source
+
+- [GitHub repository](https://github.com/Khansuhai/ACTIVITY-MAPPER-)

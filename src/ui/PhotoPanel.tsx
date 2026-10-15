@@ -109,7 +109,7 @@ export function PhotoPanel({ placements, timeline, hasTrack }: PhotoPanelProps) 
               </button>
             )}
           </label>
-          <p id="clock-help" className="text-xs text-slate-500">
+          <p id="clock-help" className="text-xs text-slate-400">
             If photos without GPS land in the wrong place, the camera clock was off. Auto measures
             it from photos that have both GPS and a time.
           </p>

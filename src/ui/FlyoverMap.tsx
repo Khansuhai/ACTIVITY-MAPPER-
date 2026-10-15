@@ -69,6 +69,9 @@ export function FlyoverMap({
       center: [10, 30],
       zoom: 1.5,
       maxPitch: 85,
+      // Styles come from our fixed, trusted registry: skip re-validating their large JSON on the
+      // main thread (a big part of start-up blocking time, per Lighthouse).
+      validateStyle: false,
       attributionControl: { compact: true },
     });
     map.on('error', (e) => {
