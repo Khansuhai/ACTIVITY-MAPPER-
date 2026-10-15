@@ -17,12 +17,6 @@ export interface TrackSampler {
   /** Total length in metres (haversine). */
   readonly length: number;
   at(distance: number): SampledPosition;
-  /**
-   * The fraction of the line's Web Mercator length covered after `distance` metres. MapLibre's
-   * `line-progress` is measured in Mercator units, which differ from metres by up to 1/cos(lat),
-   * so we convert to keep the bright route line ending exactly at the marker.
-   */
-  lineProgress(distance: number): number;
 }
 
 export function createSampler(points: readonly TrackPoint[]): TrackSampler {
@@ -30,17 +24,8 @@ export function createSampler(points: readonly TrackPoint[]): TrackSampler {
 
   const n = points.length;
   const dist = new Float64Array(n);
-  const merc = new Float64Array(n);
-  for (let i = 1; i < n; i++) {
-    const a = points[i - 1]!;
-    const b = points[i]!;
-    dist[i] = dist[i - 1]! + haversine(a, b);
-    const [ax, ay] = mercator(a.lon, a.lat);
-    const [bx, by] = mercator(b.lon, b.lat);
-    merc[i] = merc[i - 1]! + Math.hypot(bx - ax, by - ay);
-  }
+  for (let i = 1; i < n; i++) dist[i] = dist[i - 1]! + haversine(points[i - 1]!, points[i]!);
   const length = dist[n - 1]!;
-  const mercLength = merc[n - 1]!;
 
   /** Index i and fraction f such that distance lies between points i and i+1. */
   function locate(distance: number): [number, number] {
@@ -69,12 +54,6 @@ export function createSampler(points: readonly TrackPoint[]): TrackSampler {
         ele: lerpNullable(a.ele, b.ele, f),
         time: lerpNullable(a.time, b.time, f),
       };
-    },
-    lineProgress(distance) {
-      if (mercLength === 0) return 0;
-      const [i, f] = locate(distance);
-      const m = merc[i]! + (merc[Math.min(i + 1, n - 1)]! - merc[i]!) * f;
-      return m / mercLength;
     },
   };
 }

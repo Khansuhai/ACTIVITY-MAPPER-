@@ -68,7 +68,6 @@ describe('createTimeline', () => {
     expect(mid.progress).toBeCloseTo(0.5, 6);
     const end = timeline.at(timeline.introDuration + timeline.mainDuration);
     expect(end.progress).toBeCloseTo(1, 9);
-    expect(end.lineProgress).toBeCloseTo(1, 9);
   });
 
   it('pulls back in the outro and stays put at the end', () => {

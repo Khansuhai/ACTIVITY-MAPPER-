@@ -22,8 +22,6 @@ export interface Frame {
   distance: number;
   /** Fraction of the track travelled (by distance), 0..1. */
   progress: number;
-  /** Same moment as MapLibre `line-progress` (Mercator length fraction), 0..1. */
-  lineProgress: number;
   position: SampledPosition;
   camera: CameraState;
 }
@@ -36,6 +34,8 @@ export interface Timeline {
   readonly outroDuration: number;
   /** Track length in metres. */
   readonly length: number;
+  /** Zoom of the chase camera during the main phase. */
+  readonly chaseZoom: number;
   at(time: number): Frame;
 }
 
@@ -106,7 +106,6 @@ export function createTimeline(points: readonly TrackPoint[], options: TimelineO
       phase,
       distance,
       progress: length > 0 ? distance / length : 1,
-      lineProgress: sampler.lineProgress(distance),
       position: sampler.at(distance),
       camera,
     };
@@ -118,6 +117,7 @@ export function createTimeline(points: readonly TrackPoint[], options: TimelineO
     mainDuration,
     outroDuration,
     length,
+    chaseZoom,
     at(time) {
       const t = Math.min(duration, Math.max(0, time));
       if (t < introDuration) {

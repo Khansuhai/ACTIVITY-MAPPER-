@@ -12,7 +12,6 @@ import {
   localBearing,
   shortestDelta,
 } from '../src/camera/smooth';
-import { haversine } from '../src/track/geo';
 import { createSampler, mercator, unmercator } from '../src/track/sampler';
 import { createTimeline } from '../src/timeline/timeline';
 import { M_PER_DEG } from './helpers';
@@ -34,21 +33,6 @@ describe('sampler', () => {
     expect(mid.time).toBeCloseTo(5000, 3);
     expect(s.at(-10)).toEqual(s.at(0));
     expect(s.at(1e9)).toEqual(s.at(100));
-  });
-
-  it('maps distance to Mercator line progress, not metric progress', () => {
-    // 1° north from 0° then 1° north from 60°: equal metres, but Mercator stretches the second.
-    const points = [
-      { lat: 0, lon: 0, ele: null, time: null },
-      { lat: 1, lon: 0, ele: null, time: null },
-      { lat: 60, lon: 0, ele: null, time: null },
-      { lat: 61, lon: 0, ele: null, time: null },
-    ];
-    const s = createSampler(points);
-    const firstLeg = haversine(points[0]!, points[1]!);
-    expect(s.lineProgress(0)).toBe(0);
-    expect(s.lineProgress(s.length)).toBeCloseTo(1, 9);
-    expect(s.lineProgress(firstLeg)).toBeLessThan(firstLeg / s.length);
   });
 
   it('round-trips Mercator coordinates', () => {
