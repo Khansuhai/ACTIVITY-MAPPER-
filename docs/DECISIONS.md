@@ -225,6 +225,84 @@ Plan: after Phase 4, wrap the same web app with Capacitor for Android. Backgroun
 native background-location plugin (a PWA cannot record reliably with the screen off). Building
 the APK needs the Android SDK, which is not installed yet.
 
+## Phase 3: Photos (October 2026)
+
+### D19. Our own HEIF EXIF reader in front of exifr
+
+`exifr` 7.1.3 (MIT, unmaintained since 2022 but still the best option) reads JPEG EXIF well. Its
+HEIC reader ignores the `iloc` box's `base_offset`. iPhones write `base_offset = 0`, so their
+files work, but libheif-based encoders put the item position there, and exifr then reads garbage
+("Malformed EXIF data"). `src/photos/heif.ts` (about 120 lines, ISO/IEC 23008-12) finds the Exif
+item through `iinf`/`iloc` correctly and hands exifr only the TIFF block. A HEIC fixture that
+uses a base offset tests it. Worth reporting upstream.
+
+We also read `DateTimeOriginal` as a raw string (`reviveValues: false`): letting exifr revive it
+into a `Date` would silently apply the browser's time zone.
+
+### D20. Photo time = wall clock − time zone + clock correction
+
+- Time zone: `OffsetTimeOriginal` when the camera wrote it (phones do), otherwise the browser's
+  zone at that date.
+- **Clock correction** (minutes, the spec's "camera-clock offset") is added to every photo.
+- **Auto** suggests a correction: for photos with GPS _and_ time, the recorded time at the
+  photo's GPS position minus its timestamp; the median, rounded to the minute. Photos near a
+  place the route passes twice are skipped, because the right pass is unknown while the clock is
+  off.
+
+### D21. Placing photos on the route
+
+- **GPS** photos snap to the nearest point of the route (segment projection, not nearest
+  vertex). If the route passes within 60 m of that distance more than once (out-and-back,
+  loops), the photo's time picks the pass. On the 24-photo sample (an out-and-back hike), every
+  photo is within 12 m of its true position, all on the correct pass.
+- **No GPS**: placed at the position recorded at the photo's time.
+- GPS more than 1 km from the route falls back to time. Photos taken more than 10 minutes
+  outside the recording, or with no metadata at all, are listed as unplaced with the reason,
+  never guessed.
+
+### D22. Photo stops in the timeline
+
+Each placed photo is a stop. Travel between stops is split into segments with durations
+proportional to distance, and every segment brakes and accelerates smoothly (2 s trapezoidal
+ramps), so the camera eases into each photo instead of jolting. A stop lasts 4 s by default;
+photos at the same spot play back to back in the order taken. `timeline.at(t).photo` gives the
+photo id and progress, so preview and export stay one function.
+
+Known trade-off: each photo adds 4 s, so the 10 km sample with 23 photos runs 2:19. Phase 4's
+target-length setting will scale travel and stop durations to fit.
+
+### D23. Full-resolution photos without running out of memory
+
+A 48 MP photo takes about 190 MB once decoded, so decoding 20+ of them at once is not an option.
+
+- Lists and map pins use 192 px thumbnails.
+- `PhotoCache` keeps at most 3 photos decoded (current, next, previous), each **at no less than
+  the size it is shown at** (canvas pixels × 1.12 headroom for the zoom and overscan), never
+  upscaled; least recently used ones are closed.
+- The next photo starts decoding 3 s before its stop.
+- **HEIC**: Safari decodes it natively. Chrome, Edge and Firefox still cannot in 2026, so it is
+  converted once with `heic-to` (libheif 1.23 in WebAssembly, in its own Web Worker) to a
+  **full-resolution JPEG at quality 0.95**. Decoding HEIC on demand takes 1–2 s per photo, too
+  slow for playback. The 0.95 JPEG keeps every pixel and is visually lossless.
+- `heic-to` is **LGPL-3.0**. We load it unmodified as a separate on-demand file, so it can be
+  replaced, and we credit it in `THIRD-PARTY-NOTICES.md`. `heic2any` was rejected: it is labelled
+  MIT but bundles a 2020 LGPL libheif, and it was abandoned in 2023.
+
+### D24. The photo overlay is a 2D canvas with a pure layout
+
+`photoLayout()` (pure, tested) decides where the photo goes at each moment of its stop:
+
+- a smoothstep fade in and out
+- a slow 6 % zoom (Ken Burns)
+- a small pan whose direction comes from the photo id
+- **Photos close to the frame's shape** (within 1.4×, which includes 4:3 phone photos in 16:9)
+  fill it with 4 % overscan, so the pan never shows an edge.
+- **Other shapes** (portrait in landscape) are shown whole on a blurred, enlarged, darkened copy
+  of themselves. The blur is precomputed once at 48 px wide, so drawing it every frame is cheap.
+
+`drawPhoto()` draws onto any 2D context, so the Phase 4 exporter reuses it. Playback stays at
+about 139 fps through photo stops. Map attribution stays visible above photos.
+
 ### Dependency licenses (Phase 1)
 
 | Package                                    | License      | Use             |

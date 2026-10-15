@@ -3,9 +3,9 @@
 Turn a GPS activity (run, ride, hike, ski) into a cinematic 3D flyover video, entirely in your
 browser. Free and open source: no account, no watermark, your files never leave your device.
 
-> Work in progress. Done so far: drop a GPX, TCX, FIT or KML file to see its stats and a smooth
-> 3D flyover over real terrain (play, pause, scrub). Photos, MP4 export and an Android app come
-> next (see [PROMPT.md](PROMPT.md)).
+> Work in progress. Done so far: drop a GPX, TCX, FIT or KML file, plus your photos (JPEG or
+> HEIC), to get a smooth 3D flyover over real terrain that stops at each photo where it was taken,
+> at full resolution. MP4 export and an Android app come next (see [PROMPT.md](PROMPT.md)).
 
 ## Develop
 
@@ -16,6 +16,7 @@ pnpm install
 pnpm dev        # http://localhost:5173
 pnpm test       # unit tests
 pnpm lint && pnpm typecheck && pnpm build
+pnpm sample:photos  # 24 test photos along the sample hike, in tmp/ (needs uv)
 ```
 
 Technical choices and their reasons are logged in [docs/DECISIONS.md](docs/DECISIONS.md).
@@ -31,4 +32,5 @@ Technical choices and their reasons are logged in [docs/DECISIONS.md](docs/DECIS
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE). Third-party licences, including the LGPL HEIC decoder, are listed in
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
