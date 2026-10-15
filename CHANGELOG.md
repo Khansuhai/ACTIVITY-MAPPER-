@@ -6,6 +6,18 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Android app (Capacitor): record runs, rides and hikes with the screen off, with pause,
+  auto-pause and live stats; take photos during the activity, pinned to where you are.
+- "My trips": recorded activities saved on the phone; rename, delete, share as GPX, or open in
+  the studio to make the video with the photos already in place. Unfinished recordings are
+  recovered after a crash.
+- Share a finished video to other apps from the export panel.
+- Camera styles: Chase, Drone and Cinematic (sweeping angles that swing around highlights).
+- Video title, photo display time (automatic or 2–8 s) and your own notes along the route.
+- [Feature comparison](docs/FEATURE-PARITY.md) with commercial flyover apps.
+
 ## [0.6.0] - 2026-10-16
 
 ### Added

@@ -26,6 +26,13 @@ Used to write MP4 files when exporting a video.
 - The MPL-2.0 is a file-level copyleft: its source files stay under the MPL (source on GitHub and
   npm); OpenFlyover's own code stays MIT. Licence text: <https://mozilla.org/MPL/2.0/>.
 
+## Capacitor and plugins (MIT)
+
+The Android app uses [Capacitor](https://capacitorjs.com) (`@capacitor/core`, `android`, `app`,
+`camera`, `filesystem`, `share`) and
+[@capacitor-community/background-geolocation](https://github.com/capacitor-community/background-geolocation),
+all MIT, unmodified.
+
 ## Map and terrain data
 
 Data sources and their required attributions are listed in the README and shown on the map.

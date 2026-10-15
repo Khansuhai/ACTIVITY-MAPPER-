@@ -486,6 +486,57 @@ real GPU and rendered 750 frames of 720p in about 75 s.
 The demo leaves out the sample photos, which are synthetic gradients and would look like test
 data; `--with-photos` includes them.
 
+## Phase 7: phone app
+
+### D39. Features are compared, never copied
+
+The request was to match a commercial flyover app "exactly", using its source code. We don't:
+PROMPT.md forbids copying or decompiling other apps, and it would not be legal to publish.
+Instead [FEATURE-PARITY.md](FEATURE-PARITY.md) lists features from the apps' own public support
+pages, and each one is designed and written here from scratch, with our own names, layout and
+artwork.
+
+### D40. Camera styles: chase, drone, cinematic
+
+One smoothed chase path stays the source of truth (D13); the styles only offset it, so they
+can't add jitter. **Drone** is higher (−1.2 zoom) and flatter (≤ 45° pitch). **Cinematic**
+sweeps the bearing ±50° on a slow sine (one cycle per a third of the route, 2–8 km), "breathes"
+pitch and zoom with it, and swings 120° around each highlight and note (Gaussian, σ 350 m).
+All three stay pure functions of distance, so preview and export match frame for frame.
+
+### D41. The recorder is pure; the phone services sit behind one module
+
+`record/recorder.ts` takes fixes and a `now` and has no timers or platform calls, so pausing,
+auto-pause and the filters are unit-tested without a phone. Fixes worse than 35 m or implying
+more than 70 m/s are dropped; points closer than 2.5 m are skipped unless 10 s have passed
+(so stops keep a heartbeat). Auto-pause after 30 s within 20 m; it stops the clock at the moment
+you stopped, not when it noticed. A pause starts a new segment, so a lift or car ride while
+paused never counts, and the GPX keeps one `trkseg` per segment.
+
+`record/platform.ts` is the only file that knows whether it runs in the Android app or a
+browser: GPS (a foreground location service in the app, `watchPosition` in a browser), the
+camera, and sharing (share sheet, Web Share, or a download).
+
+### D42. Trips are stored on the phone (IndexedDB), with a crash-safe draft
+
+Trips and their full-resolution photos go to IndexedDB in the app's web view: no account, no
+server, nothing uploaded. While recording, a draft is written every 10 s (and right after each
+photo); if the app is killed, the Record tab offers to save it on the next start. Photos taken
+while recording carry their exact GPS position and UTC time, so the studio places them without
+reading EXIF or asking about the camera clock.
+
+### D43. Android app with Capacitor 8
+
+Capacitor wraps the same web build, so the studio, export and recorder are one code base.
+Plugins (all MIT): `@capacitor-community/background-geolocation` (GPS with the screen off, as a
+location foreground service with a notification; `useLegacyBridge` keeps updates flowing after
+5 minutes in the background), `@capacitor/camera`, `/filesystem`, `/share` and `/app`. React
+Native or Kotlin would mean a second UI to maintain; a PWA can't record with the screen off.
+
+The Android WebView (Chrome) has WebCodecs, so export works on the phone; the result goes to
+the share sheet (Instagram, YouTube, WhatsApp…). Building needs JDK 21 (Gradle 8.14 can't run
+on JDK 25) and the Android SDK.
+
 ### Dependency licenses (Phase 1)
 
 | Package                                    | License      | Use             |

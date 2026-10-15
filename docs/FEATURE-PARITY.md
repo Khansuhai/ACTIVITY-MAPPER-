@@ -11,16 +11,16 @@ Sources (checked 2026-10-16): Relive's public
 and [app update](https://support.relive.com/kb/guide/en/your-new-relive-is-here-SkECJOTybj/Steps/4393615)
 pages, and its home page.
 
-Legend: ✅ done · 🚧 Phase 7 (in progress) · 🔜 planned later · ➖ out of scope (needs a server)
+Legend: ✅ done · 🔜 planned later · ➖ out of scope (needs a server)
 
 | Feature                                   | Paid in Relive | OpenFlyover                                         |
 | ----------------------------------------- | -------------- | --------------------------------------------------- |
 | 3D flyover video of an activity           | free           | ✅ jitter-free, ridge-aware camera                  |
 | Import from GPS watches/apps (files)      | free           | ✅ GPX, TCX, FIT, KML                               |
-| Record an activity with the phone's GPS   | free           | 🚧 Android app, background recording                |
-| Pause / auto-pause while recording        | free           | 🚧                                                  |
-| Take photos during the activity           | free           | 🚧 placed at your exact recorded position           |
-| Save trips, name them, trip list          | free           | 🚧                                                  |
+| Record an activity with the phone's GPS   | free           | ✅ Android app, background recording                |
+| Pause / auto-pause while recording        | free           | ✅                                                  |
+| Take photos during the activity           | free           | ✅ placed at your exact recorded position           |
+| Save trips, name them, trip list          | free           | ✅ on the phone, plus GPX export                    |
 | Photos in the video                       | up to 100 paid | ✅ unlimited, full resolution, HEIC                 |
 | Video clips in the video                  | paid           | 🔜 after the recorder                               |
 | Music                                     | paid, preset   | ✅ your own music                                   |
@@ -28,16 +28,16 @@ Legend: ✅ done · 🚧 Phase 7 (in progress) · 🔜 planned later · ➖ out 
 | Video speed / length                      | paid           | ✅ 15 s to 3 min                                    |
 | Portrait / square / landscape video       | not stated     | ✅ 9:16, 1:1, 16:9                                  |
 | Place names on/off                        | paid           | ✅ peaks and passes, toggle                         |
-| Photo display time                        | paid           | 🚧 setting (today automatic)                        |
-| Notes / emoji moments, custom title       | paid           | 🚧                                                  |
+| Photo display time                        | paid           | ✅ automatic or 2–8 s                               |
+| Notes / emoji moments, custom title       | paid           | ✅                                                  |
 | Theme colour                              | paid           | ✅ 4 themes + route colouring by speed/HR/elevation |
 | Remove the app's credits / watermark      | paid           | ✅ there are none                                   |
 | Activities longer than 12 h               | paid           | ✅ no limit                                         |
-| Multiple camera angles                    | not stated     | 🚧 Chase, Drone, Cinematic                          |
+| Multiple camera angles                    | not stated     | ✅ Chase, Drone, Cinematic                          |
 | Snow (winter) landscapes                  | paid           | 🔜 winter map style                                 |
 | Live stats, elevation profile, highlights | partly         | ✅                                                  |
 | Privacy zone around home                  | not stated     | ✅                                                  |
-| Share to social apps                      | free           | ✅ MP4 file; 🚧 phone share sheet                   |
+| Share to social apps                      | free           | ✅ MP4 file and the phone's share sheet             |
 | Interactive map of past activities        | free           | 🔜 with the trip library                            |
 | Sync with Strava / Garmin accounts        | free           | ➖ needs a small server (later, opt-in)             |
 | Social feed, following friends            | free           | ➖ needs a server                                   |

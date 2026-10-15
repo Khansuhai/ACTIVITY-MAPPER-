@@ -25,6 +25,10 @@ entirely in your browser. Free and open source: no account, no watermark, no upl
 - **Music**: add your own track; it loops and fades in the video.
 - **Export MP4**: 16:9, 9:16 (Reels, Shorts), 1:1; 720p, 1080p or 4K; 30 or 60 fps; 15 s to
   3 min. Rendered frame by frame, so it is smooth on any computer.
+- **Camera styles**: Chase, Drone, or Cinematic with sweeping angles around highlights. Add a
+  title and your own notes along the route; choose how long each photo shows.
+- **Android app**: record your run, ride or hike with the screen off (pause, auto-pause, live
+  stats), take photos on the way, save the trip, make the video on the phone and share it.
 - **Private by design**: files and photos are processed in your browser and never uploaded.
 
 | Title card                                         | Flyover                                 | End card                                       |
@@ -70,6 +74,18 @@ pnpm sample:photos  # 24 test photos along the sample hike, in tmp/
 pnpm demo:capture   # record the README demo video with headless Chrome (needs pnpm dev)
 pnpm demo:media     # turn it into the GIF, stills and social preview image
 ```
+
+### Android app
+
+Needs the [Android SDK](https://developer.android.com/studio) (Android Studio, or the
+command-line tools) and JDK 21.
+
+```sh
+pnpm android:sync   # build the web app and copy it into android/
+pnpm android:apk    # debug APK in android/app/build/outputs/apk/debug/
+```
+
+Or open `android/` in Android Studio and press Run with your phone connected.
 
 How it works, and why: [docs/DECISIONS.md](docs/DECISIONS.md). Contributions are welcome, see
 [CONTRIBUTING.md](CONTRIBUTING.md).
