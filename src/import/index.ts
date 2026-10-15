@@ -1,4 +1,3 @@
-import { parseFit } from './fit';
 import { parseGpx } from './gpx';
 import { parseKml } from './kml';
 import { parseTcx } from './tcx';
@@ -36,9 +35,12 @@ export async function importActivity(data: ArrayBuffer, fileName = ''): Promise<
 
   let track: Track;
   switch (format) {
-    case 'fit':
+    case 'fit': {
+      // Loaded on demand: the FIT profile tables are large and only FIT users need them.
+      const { parseFit } = await import('./fit');
       track = await parseFit(data);
       break;
+    }
     case 'gpx':
       track = parseGpx(decodeText(bytes));
       break;
