@@ -442,6 +442,50 @@ the video length, 1.5 s fade-in, 3 s fade-out, at the chosen volume. Mediabunny 
 **AAC 192 kbit/s** (Opus where AAC can't be encoded, e.g. Firefox). The same `musicGain()`
 drives both, so they match.
 
+## Phase 6: Polish and publish (October 2026)
+
+### D36. Deploy to GitHub Pages only after CI passes
+
+`deploy.yml` runs on `workflow_run` of CI (and manually). It checks out exactly the commit CI
+tested (`workflow_run.head_sha`), builds, and publishes `dist/` with `upload-pages-artifact` and
+`deploy-pages`. A red build is never deployed. Vite's `base: './'` makes the build work under
+the `/ACTIVITY-MAPPER-/` sub-path without configuration. Pages must be switched on once in the
+repository settings (Source: GitHub Actions); the workflow token cannot do that itself.
+
+### D37. Lighthouse and accessibility
+
+Desktop Lighthouse on the production build, before → after:
+
+| Category       | Before | After |
+| -------------- | ------ | ----- |
+| Performance    | 71     | 75    |
+| Accessibility  | 96     | 100   |
+| Best practices | 100    | 100   |
+| SEO            | 92     | 100   |
+
+- Contrast: white text on `orange-500` was 2.9:1; text buttons now use `orange-700` (≈ 5:1).
+- `validateStyle: false` for our fixed, trusted styles halved total blocking time (1180 →
+  650 ms; time to interactive 3.0 → 2.1 s). The rest is MapLibre building the 3D map at
+  start-up. Not creating the map until a file is loaded would hide it, but would also make the
+  first impression worse, so we keep it.
+- Keyboard: Space play/pause, ←/→ ±5 s (Shift ±1 s), Home/End; native controls everywhere,
+  labelled; an error boundary shows a reload screen instead of a blank page.
+- `robots.txt`, `llms.txt`, Open Graph tags and a 1200×630 social image.
+
+### D38. Demo media is made by the app itself
+
+The README GIF and stills come from a real export, not a screen recording:
+`scripts/capture-demo.mjs` drives **headless Chrome over the DevTools Protocol** (Node 24's
+built-in `fetch` and `WebSocket`, no Puppeteer). It loads the sample hike into the dev server,
+runs the normal Export, and posts the MP4 to a **dev-only** endpoint (`/__dev/save`, Vite
+`apply: 'serve'`, safe file names only, writes to `tmp/captures/`). `scripts/make-demo-media.py`
+(PyAV + Pillow via `uv`) turns it into a 480 px, 10 fps GIF with one shared palette and no
+dithering (8 MB rather than 23 MB), three stills and the social image. Headless Chrome used the
+real GPU and rendered 750 frames of 720p in about 75 s.
+
+The demo leaves out the sample photos, which are synthetic gradients and would look like test
+data; `--with-photos` includes them.
+
 ### Dependency licenses (Phase 1)
 
 | Package                                    | License      | Use             |
