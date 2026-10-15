@@ -5,10 +5,15 @@ import type { Viewport } from '../camera/camera';
 import { ACCEPTED_EXTENSIONS, ImportError, importActivity, type Track } from '../import';
 import { createTimeline } from '../timeline/timeline';
 import { computeStats } from '../track/stats';
+import type { PhotoPin } from '../render/scene';
 import { FlyoverMap } from '../ui/FlyoverMap';
+import { PhotoOverlay } from '../ui/PhotoOverlay';
+import { PhotoPanel } from '../ui/PhotoPanel';
 import { PlayerControls } from '../ui/PlayerControls';
 import { StatsPanel } from '../ui/StatsPanel';
 import { useFileDrop } from '../ui/useFileDrop';
+import { isPhotoFile, usePhotos } from './photos';
+import { usePhotoPlacements } from './placement';
 import { usePlayer } from './player';
 
 const SAMPLE_URL = './samples/sample-hike.gpx';
@@ -47,6 +52,16 @@ export function App() {
     (file: File) => void load(file.name, () => file.arrayBuffer()),
     [load],
   );
+  /** Dropped files: photos go to the photo list, the first other file is the activity. */
+  const loadFiles = useCallback(
+    (files: File[]) => {
+      const photos = files.filter(isPhotoFile);
+      if (photos.length > 0) usePhotos.getState().addFiles(photos);
+      const activity = files.find((f) => !isPhotoFile(f));
+      if (activity) loadFile(activity);
+    },
+    [loadFile],
+  );
   const loadSample = () =>
     void load('sample-hike.gpx', async () => {
       const res = await fetch(SAMPLE_URL);
@@ -54,13 +69,31 @@ export function App() {
       return res.arrayBuffer();
     });
 
-  const dragging = useFileDrop(loadFile);
+  const dragging = useFileDrop(loadFiles);
   const stats = useMemo(() => (loaded ? computeStats(loaded.track.points) : null), [loaded]);
   const basemap = getBasemap(basemapId);
+  const placements = usePhotoPlacements(loaded?.track ?? null);
   // The timeline depends on the viewport: overview zoom fits the route to the map's size.
   const timeline = useMemo(
-    () => (loaded && viewport ? createTimeline(loaded.track.points, { viewport }) : null),
-    [loaded, viewport],
+    () =>
+      loaded && viewport
+        ? createTimeline(loaded.track.points, { viewport, photos: placements.stops })
+        : null,
+    [loaded, viewport, placements.stops],
+  );
+  const pins = useMemo<PhotoPin[]>(
+    () =>
+      placements.photos.flatMap((p) =>
+        p.position && p.item.thumb ? [{ id: p.item.id, ...p.position, thumb: p.item.thumb }] : [],
+      ),
+    [placements.photos],
+  );
+  const photoBlobs = useMemo(
+    () =>
+      new Map(
+        placements.photos.flatMap((p) => (p.item.display ? [[p.item.id, p.item.display]] : [])),
+      ),
+    [placements.photos],
   );
 
   return (
@@ -115,12 +148,16 @@ export function App() {
           <StatsPanel track={loaded.track} stats={stats} fileName={loaded.fileName} />
         ) : (
           <div className="rounded-lg border border-dashed border-slate-700 p-5 text-sm text-slate-400">
-            <p className="font-medium text-slate-200">Drop a GPX, TCX, FIT or KML file anywhere.</p>
+            <p className="font-medium text-slate-200">
+              Drop a GPX, TCX, FIT or KML file anywhere, with photos if you like.
+            </p>
             <p className="mt-2">
               Export it from Garmin Connect, COROS, Strava, Komoot or your watch&rsquo;s USB drive.
             </p>
           </div>
         )}
+
+        <PhotoPanel placements={placements} timeline={timeline} hasTrack={!!loaded} />
 
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-slate-400">Map style</span>
@@ -149,13 +186,15 @@ export function App() {
             timeline={timeline}
             basemap={basemap}
             terrain={DEFAULT_TERRAIN}
+            pins={pins}
             onViewportChange={setViewport}
           />
+          <PhotoOverlay timeline={timeline} blobs={photoBlobs} />
         </div>
         {timeline && <PlayerControls timeline={timeline} />}
         {dragging && (
           <div className="pointer-events-none fixed inset-0 z-10 flex items-center justify-center border-4 border-dashed border-orange-400 bg-slate-950/70">
-            <p className="text-2xl font-semibold text-white">Drop to load your activity</p>
+            <p className="text-2xl font-semibold text-white">Drop your activity and photos</p>
           </div>
         )}
       </main>

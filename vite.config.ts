@@ -8,8 +8,9 @@ export default defineConfig({
   base: './',
   plugins: [react(), tailwindcss()],
   build: {
-    // MapLibre alone is ~1 MB minified (~300 kB gzip) and is needed on first paint.
-    chunkSizeWarningLimit: 1400,
+    // MapLibre alone is ~1 MB minified (~300 kB gzip) and is needed on first paint. The 3.2 MB
+    // heic-to chunk (libheif in WebAssembly) loads only for HEIC photos on non-Safari browsers.
+    chunkSizeWarningLimit: 3300,
   },
   test: {
     include: ['tests/**/*.test.ts'],

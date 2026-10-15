@@ -11,6 +11,15 @@ const DEM_TERRAIN = 'dem-terrain';
 const DEM_HILLSHADE = 'dem-hillshade';
 const ROUTE = 'route';
 const DOTS = 'route-dots';
+const PINS = 'photo-pins';
+
+/** A photo pin on the map. */
+export interface PhotoPin {
+  id: string;
+  lon: number;
+  lat: number;
+  thumb: ImageBitmap;
+}
 
 export const ROUTE_COLOR = '#f97316';
 
@@ -61,6 +70,8 @@ export class RouteLayers {
   /** Highest lit dot index, -1 for none. */
   private lit = -1;
   private marker = -1;
+  private track: Track | null = null;
+  private pinImages: string[] = [];
 
   private readonly map: MapLibreMap;
 
@@ -70,6 +81,15 @@ export class RouteLayers {
 
   /** Adds or replaces the route. `spacing` is the dot spacing in metres (see dotSpacing). */
   set(track: Track | null, spacing: number) {
+    // Rebuilding the route clears the lit dots and flickers, so skip it when nothing changed.
+    if (
+      track === this.track &&
+      spacing === this.spacing &&
+      hasSource(this.map, ROUTE) === !!track
+    ) {
+      return;
+    }
+    this.track = track;
     const map = this.map;
     for (const id of ['route-marker', 'route-dots', 'route-line', 'route-casing']) {
       if (map.getLayer(id)) map.removeLayer(id);
@@ -149,6 +169,53 @@ export class RouteLayers {
     });
   }
 
+  /**
+   * Shows a round thumbnail pin where the flyover stops for each photo. Static between edits,
+   * so it costs nothing per frame.
+   */
+  setPhotos(pins: readonly PhotoPin[]) {
+    const map = this.map;
+    if (map.getLayer(PINS)) map.removeLayer(PINS);
+    if (map.getSource(PINS)) map.removeSource(PINS);
+    for (const id of this.pinImages) if (map.hasImage(id)) map.removeImage(id);
+    this.pinImages = [];
+    if (pins.length === 0) return;
+
+    const ratio = Math.min(3, Math.max(1, globalThis.devicePixelRatio || 1));
+    for (const pin of pins) {
+      const imageId = `photo-pin-${pin.id}`;
+      map.addImage(imageId, pinImage(pin.thumb, ratio), { pixelRatio: ratio });
+      this.pinImages.push(imageId);
+    }
+    map.addSource(PINS, {
+      type: 'geojson',
+      data: {
+        type: 'FeatureCollection',
+        features: pins.map((p) => ({
+          type: 'Feature',
+          properties: { icon: `photo-pin-${p.id}` },
+          geometry: { type: 'Point', coordinates: [p.lon, p.lat] },
+        })),
+      },
+    });
+    map.addLayer(
+      {
+        id: PINS,
+        type: 'symbol',
+        source: PINS,
+        layout: {
+          'icon-image': ['get', 'icon'],
+          // Smaller when zoomed out, so many photos don't bury the route on the overview.
+          'icon-size': ['interpolate', ['linear'], ['zoom'], 11, 0.45, 14, 1],
+          'icon-anchor': 'bottom',
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true,
+        },
+      },
+      map.getLayer('route-marker') ? 'route-marker' : undefined,
+    );
+  }
+
   /** Lights dots up to the frame's position and moves the marker. Cost scales with the change. */
   update(distance: number) {
     if (this.count === 0) return;
@@ -165,6 +232,46 @@ export class RouteLayers {
       this.marker = k;
     }
   }
+}
+
+function hasSource(map: MapLibreMap, source: string): boolean {
+  return map.getSource(source) !== undefined;
+}
+
+/** PIN_SIZE CSS px circle with a white ring and a small pointer, filled with the thumbnail. */
+const PIN_SIZE = 40;
+
+function pinImage(thumb: ImageBitmap, ratio: number): ImageData {
+  const d = PIN_SIZE * ratio;
+  const ring = 3 * ratio;
+  const tip = 7 * ratio;
+  const canvas = new OffscreenCanvas(Math.ceil(d), Math.ceil(d + tip));
+  const ctx = canvas.getContext('2d')!;
+  const r = d / 2;
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.moveTo(r - tip, d - tip / 2);
+  ctx.lineTo(r, d + tip);
+  ctx.lineTo(r + tip, d - tip / 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(r, r, r, 0, Math.PI * 2);
+  ctx.fill();
+  // Thumbnail, cover-fitted into the inner circle.
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(r, r, r - ring, 0, Math.PI * 2);
+  ctx.clip();
+  const s = Math.max(d / thumb.width, d / thumb.height);
+  ctx.drawImage(
+    thumb,
+    r - (thumb.width * s) / 2,
+    r - (thumb.height * s) / 2,
+    thumb.width * s,
+    thumb.height * s,
+  );
+  ctx.restore();
+  return ctx.getImageData(0, 0, canvas.width, canvas.height);
 }
 
 /** Puts the camera where one timeline frame says. */

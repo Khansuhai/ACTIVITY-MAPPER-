@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 
 /**
- * Accepts files dropped anywhere on the window. Returns whether a file is being dragged over it,
+ * Accepts files dropped anywhere on the window. Returns whether files are being dragged over it,
  * for showing a drop overlay.
  */
-export function useFileDrop(onFile: (file: File) => void): boolean {
+export function useFileDrop(onFiles: (files: File[]) => void): boolean {
   const [dragging, setDragging] = useState(false);
 
   useEffect(() => {
@@ -33,8 +33,8 @@ export function useFileDrop(onFile: (file: File) => void): boolean {
       e.preventDefault();
       depth = 0;
       setDragging(false);
-      const file = e.dataTransfer?.files[0];
-      if (file) onFile(file);
+      const files = Array.from(e.dataTransfer?.files ?? []);
+      if (files.length > 0) onFiles(files);
     };
 
     window.addEventListener('dragenter', onEnter);
@@ -47,7 +47,7 @@ export function useFileDrop(onFile: (file: File) => void): boolean {
       window.removeEventListener('dragleave', onLeave);
       window.removeEventListener('drop', onDrop);
     };
-  }, [onFile]);
+  }, [onFiles]);
 
   return dragging;
 }

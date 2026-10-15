@@ -6,7 +6,13 @@ import type { TerrainSource } from '../basemaps/terrain';
 import type { Track } from '../import';
 import '../render/maplibre';
 import { dotSpacing } from '../render/dots';
-import { addScene, applyCamera, RouteLayers, setExaggeration } from '../render/scene';
+import {
+  addScene,
+  applyCamera,
+  type PhotoPin,
+  RouteLayers,
+  setExaggeration,
+} from '../render/scene';
 import type { Viewport } from '../camera/camera';
 import type { Timeline } from '../timeline/timeline';
 
@@ -15,6 +21,7 @@ interface FlyoverMapProps {
   timeline: Timeline | null;
   basemap: Basemap;
   terrain: TerrainSource;
+  pins: readonly PhotoPin[];
   onViewportChange(viewport: Viewport): void;
 }
 
@@ -27,12 +34,13 @@ export function FlyoverMap({
   timeline,
   basemap,
   terrain,
+  pins,
   onViewportChange,
 }: FlyoverMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   // Latest props for MapLibre event handlers, which outlive a single render.
-  const latest = useRef({ track, timeline, basemap, terrain });
+  const latest = useRef({ track, timeline, basemap, terrain, pins });
   const styleReadyRef = useRef(false);
   const routeRef = useRef<RouteLayers | null>(null);
   const basemapIdRef = useRef(basemap.id);
@@ -41,7 +49,7 @@ export function FlyoverMap({
   const [hasWebGL2] = useState(supportsWebGL2);
 
   useEffect(() => {
-    latest.current = { track, timeline, basemap, terrain };
+    latest.current = { track, timeline, basemap, terrain, pins };
   });
 
   // Create the map once.
@@ -67,11 +75,12 @@ export function FlyoverMap({
 
     // A style switch replaces everything, so rebuild the scene whenever a style finishes loading.
     map.on('style.load', () => {
-      const { track, timeline, basemap, terrain } = latest.current;
+      const { track, timeline, basemap, terrain, pins } = latest.current;
       addScene(map, basemap, terrain, usePlayer.getState().exaggeration);
       routeRef.current = new RouteLayers(map);
       styleReadyRef.current = true;
       showRoute(map, routeRef.current, track, timeline);
+      routeRef.current.setPhotos(pins);
     });
     mapRef.current = map;
     // Debug handle for the browser console during development; stripped from production builds.
@@ -99,6 +108,11 @@ export function FlyoverMap({
     if (!map || !routeRef.current || !styleReadyRef.current) return;
     showRoute(map, routeRef.current, track, timeline);
   }, [track, timeline]);
+
+  // Photo pins.
+  useEffect(() => {
+    if (styleReadyRef.current) routeRef.current?.setPhotos(pins);
+  }, [pins]);
 
   // Follow player time.
   useEffect(() => {
