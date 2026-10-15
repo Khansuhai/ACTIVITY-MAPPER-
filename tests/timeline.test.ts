@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildSchedule,
   createTimeline,
   defaultMainDuration,
   INTRO_HOLD,
@@ -87,7 +88,7 @@ describe('createTimeline', () => {
   });
 
   it('respects a custom main duration and pitch', () => {
-    const t = createTimeline(switchbacks(), { viewport: VIEWPORT, mainDuration: 15, pitch: 50 });
+    const t = createTimeline(switchbacks(), { viewport: VIEWPORT, travelDuration: 15, pitch: 50 });
     expect(t.duration).toBe(23);
     expect(t.at(10).camera.pitch).toBe(50);
   });
@@ -104,5 +105,66 @@ describe('createTimeline', () => {
       expect(f.camera.center[0]).toBeCloseTo(7, 9);
       expect(f.camera.center[1]).toBeCloseTo(46, 9);
     }
+  });
+});
+
+describe('photo stops', () => {
+  const points = straight(0, 4000);
+  const photos = [
+    { id: 'b', distance: 3000 },
+    { id: 'a', distance: 1000 },
+    { id: 'a2', distance: 1000 }, // two photos at the same place: shown back to back
+  ];
+  const timeline = createTimeline(points, {
+    viewport: VIEWPORT,
+    travelDuration: 20,
+    photos,
+    photoDuration: 4,
+  });
+  const main = (t: number) => timeline.at(timeline.introDuration + t);
+
+  it('adds the stops to the main phase', () => {
+    expect(timeline.travelDuration).toBe(20);
+    expect(timeline.mainDuration).toBeCloseTo(20 + 3 * 4, 9);
+  });
+
+  it('stops at each photo, in route order, and holds still', () => {
+    // 1000 m of 4000 m = 5 s of 20 s travel, then photo a for 4 s, a2 for 4 s.
+    expect(main(5.1).photo).toMatchObject({ id: 'a' });
+    expect(main(5.1).distance).toBeCloseTo(1000, 6);
+    expect(main(7).photo?.progress).toBeCloseTo(0.5, 6);
+    expect(main(9.5).photo).toMatchObject({ id: 'a2' });
+    expect(main(8.9).camera).toEqual(main(5.1).camera);
+    // Then 2000 m (10 s) of travel to photo b.
+    expect(main(14).photo).toBeNull();
+    expect(main(23.5).photo).toMatchObject({ id: 'b' });
+    expect(main(23.5).distance).toBeCloseTo(3000, 6);
+  });
+
+  it('brakes smoothly into a stop and accelerates out of it', () => {
+    const speed = (t: number) => (main(t + 0.001).distance - main(t - 0.001).distance) / 0.002;
+    expect(speed(4.999)).toBeLessThan(2); // nearly stopped just before the photo (m/s)
+    expect(speed(2.5)).toBeGreaterThan(150); // cruising in between
+    expect(speed(13.001)).toBeLessThan(2); // just leaving the second photo
+  });
+
+  it('ends at the finish with no photo', () => {
+    const end = main(timeline.mainDuration);
+    expect(end.distance).toBeCloseTo(4000, 6);
+    expect(end.photo).toBeNull();
+  });
+
+  it('clamps photos outside the route to its ends', () => {
+    const s = buildSchedule(
+      100,
+      10,
+      [
+        { id: 'x', distance: -5 },
+        { id: 'y', distance: 500 },
+      ],
+      2,
+    );
+    expect(s.at(0.5)).toEqual({ distance: 0, photo: { id: 'x', progress: 0.25 } });
+    expect(s.at(s.duration - 1).photo?.id).toBe('y');
   });
 });

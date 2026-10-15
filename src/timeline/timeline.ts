@@ -24,13 +24,25 @@ export interface Frame {
   progress: number;
   position: SampledPosition;
   camera: CameraState;
+  /** The photo being shown (the flyover is paused at it), or null. */
+  photo: { id: string; progress: number } | null;
+}
+
+/** A photo placed on the route, where the flyover stops to show it. */
+export interface PhotoStop {
+  id: string;
+  /** Metres along the route. */
+  distance: number;
 }
 
 export interface Timeline {
   /** Total video length in seconds. */
   readonly duration: number;
   readonly introDuration: number;
+  /** Travel time plus photo stops. */
   readonly mainDuration: number;
+  /** Seconds spent moving along the route (excludes photo stops). */
+  readonly travelDuration: number;
   readonly outroDuration: number;
   /** Track length in metres. */
   readonly length: number;
@@ -41,8 +53,12 @@ export interface Timeline {
 
 export interface TimelineOptions {
   viewport: Viewport;
-  /** Seconds spent travelling the route. Default scales with distance (see defaultMainDuration). */
-  mainDuration?: number;
+  /** Seconds spent moving along the route. Default scales with distance (see defaultMainDuration). */
+  travelDuration?: number;
+  /** Photos to stop at, in any order. */
+  photos?: readonly PhotoStop[];
+  /** Seconds each photo is shown. */
+  photoDuration?: number;
   introDuration?: number;
   outroDuration?: number;
   /** Chase camera pitch in degrees. */
@@ -53,8 +69,11 @@ export interface TimelineOptions {
 export const INTRO_HOLD = 1; // seconds of still overview before the camera moves
 export const OUTRO_HOLD = 1.5;
 export const CHASE_OFFSET_Y = 0.2;
-/** Fraction of the main phase spent accelerating (and again decelerating). */
+/** Default fraction of a travel segment spent accelerating (and again decelerating). */
 export const RAMP = 0.08;
+/** Seconds to accelerate away from, or brake for, a stop. */
+export const RAMP_SECONDS = 2;
+export const PHOTO_DURATION = 4;
 
 /** 20 s plus 2 s per km, between 20 s and 2 min. */
 export function defaultMainDuration(lengthMetres: number): number {
@@ -71,7 +90,14 @@ export function createTimeline(points: readonly TrackPoint[], options: TimelineO
   const smooth = createSmoothCamera(sampler, options.smoothing ?? defaultSmoothOptions(length));
   const introDuration = options.introDuration ?? 4;
   const outroDuration = options.outroDuration ?? 4;
-  const mainDuration = options.mainDuration ?? defaultMainDuration(length);
+  const travelDuration = options.travelDuration ?? defaultMainDuration(length);
+  const schedule = buildSchedule(
+    length,
+    travelDuration,
+    options.photos ?? [],
+    options.photoDuration ?? PHOTO_DURATION,
+  );
+  const mainDuration = schedule.duration;
   const duration = introDuration + mainDuration + outroDuration;
   const pitch = options.pitch ?? 60;
   const { viewport } = options;
@@ -79,7 +105,7 @@ export function createTimeline(points: readonly TrackPoint[], options: TimelineO
   const box = bbox(points);
   const midLat = (box[1] + box[3]) / 2;
   const overview = fitBounds(box, viewport);
-  const chaseZoom = zoomForGroundSpeed(length / mainDuration, midLat, viewport.height);
+  const chaseZoom = zoomForGroundSpeed(length / travelDuration, midLat, viewport.height);
 
   const overviewCamera: CameraState = { ...overview, pitch: 0, bearing: 0, offsetY: 0 };
   const outroCamera: CameraState = {
@@ -100,7 +126,13 @@ export function createTimeline(points: readonly TrackPoint[], options: TimelineO
     };
   }
 
-  function frame(time: number, phase: Phase, distance: number, camera: CameraState): Frame {
+  function frame(
+    time: number,
+    phase: Phase,
+    distance: number,
+    camera: CameraState,
+    photo: Frame['photo'] = null,
+  ): Frame {
     return {
       time,
       phase,
@@ -108,6 +140,7 @@ export function createTimeline(points: readonly TrackPoint[], options: TimelineO
       progress: length > 0 ? distance / length : 1,
       position: sampler.at(distance),
       camera,
+      photo,
     };
   }
 
@@ -115,6 +148,7 @@ export function createTimeline(points: readonly TrackPoint[], options: TimelineO
     duration,
     introDuration,
     mainDuration,
+    travelDuration,
     outroDuration,
     length,
     chaseZoom,
@@ -125,8 +159,8 @@ export function createTimeline(points: readonly TrackPoint[], options: TimelineO
         return frame(t, 'intro', 0, interpolateCamera(overviewCamera, chase(0), easeInOutCubic(u)));
       }
       if (t <= introDuration + mainDuration) {
-        const distance = length * travelProfile((t - introDuration) / mainDuration);
-        return frame(t, 'main', distance, chase(distance));
+        const { distance, photo } = schedule.at(t - introDuration);
+        return frame(t, 'main', distance, chase(distance), photo);
       }
       const u = Math.min(1, (t - introDuration - mainDuration) / (outroDuration - OUTRO_HOLD));
       return frame(
@@ -139,9 +173,73 @@ export function createTimeline(points: readonly TrackPoint[], options: TimelineO
   };
 }
 
+type ScheduleItem =
+  | { kind: 'travel'; start: number; end: number; from: number; to: number }
+  | { kind: 'photo'; start: number; end: number; at: number; id: string };
+
 /**
- * Fraction of the route travelled at fraction `u` of the main phase: accelerate over RAMP,
+ * The main phase as a list of travel segments and photo stops. Every travel segment eases in and
+ * out (trapezoidal speed), so the camera brakes smoothly for each photo and accelerates away.
+ * Segment durations are proportional to segment length.
+ */
+export function buildSchedule(
+  length: number,
+  travelDuration: number,
+  photos: readonly PhotoStop[],
+  photoDuration: number,
+) {
+  const stops = [...photos]
+    .map((p) => ({ ...p, distance: Math.min(length, Math.max(0, p.distance)) }))
+    .sort((a, b) => a.distance - b.distance);
+  const items: ScheduleItem[] = [];
+  let t = 0;
+  let from = 0;
+  const travel = (to: number) => {
+    const d = length > 0 ? (travelDuration * (to - from)) / length : 0;
+    if (d > 0) items.push({ kind: 'travel', start: t, end: t + d, from, to });
+    t += d;
+    from = to;
+  };
+  for (const stop of stops) {
+    travel(stop.distance);
+    items.push({ kind: 'photo', start: t, end: t + photoDuration, at: stop.distance, id: stop.id });
+    t += photoDuration;
+  }
+  travel(length);
+  if (length === 0 && stops.length === 0) t = travelDuration; // nothing moves, but keep the length
+
+  return {
+    duration: t,
+    items,
+    /** Distance and photo at `time` seconds into the main phase. */
+    at(time: number): { distance: number; photo: Frame['photo'] } {
+      // Binary search for the item containing `time`.
+      let lo = 0;
+      let hi = items.length - 1;
+      while (lo < hi) {
+        const mid = (lo + hi + 1) >> 1;
+        if (items[mid]!.start <= time) lo = mid;
+        else hi = mid - 1;
+      }
+      const item = items[lo];
+      if (!item) return { distance: time > 0 ? length : 0, photo: null };
+      const u = Math.min(1, Math.max(0, (time - item.start) / (item.end - item.start)));
+      if (item.kind === 'photo') {
+        return { distance: item.at, photo: { id: item.id, progress: u } };
+      }
+      const ramp = Math.min(0.5, RAMP_SECONDS / (item.end - item.start));
+      return {
+        distance: item.from + (item.to - item.from) * travelProfile(u, ramp),
+        photo: null,
+      };
+    },
+  };
+}
+
+/**
+ * Fraction of a segment travelled at fraction `u` of its time: accelerate over RAMP,
  * cruise, then brake over RAMP (a trapezoidal speed profile, so speed is continuous).
+ * `ramp` must be in (0, 0.5].
  */
 export function travelProfile(u: number, ramp = RAMP): number {
   const x = Math.min(1, Math.max(0, u));
