@@ -6,8 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-16
+
 ### Added
 
+- Debug APK built on GitHub Actions for every push to main.
 - Android app (Capacitor): record runs, rides and hikes with the screen off, with pause,
   auto-pause and live stats; take photos during the activity, pinned to where you are.
 - "My trips": recorded activities saved on the phone; rename, delete, share as GPX, or open in
@@ -77,5 +80,6 @@ All notable changes to this project are documented here. The format follows
 - Import GPX, TCX, FIT and KML; distance, time, elevation and speed statistics.
 - 2D map of the route; CI with lint, typecheck, tests and build.
 
-[Unreleased]: https://github.com/Khansuhai/ACTIVITY-MAPPER-/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/Khansuhai/ACTIVITY-MAPPER-/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/Khansuhai/ACTIVITY-MAPPER-/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/Khansuhai/ACTIVITY-MAPPER-/releases/tag/v0.6.0
