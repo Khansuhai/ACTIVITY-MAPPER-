@@ -6,6 +6,7 @@ import {
   type Viewport,
   zoomForGroundSpeed,
 } from '../camera/camera';
+import { type ElevationFn, pitchProfile } from '../camera/clearance';
 import { createSmoothCamera, defaultSmoothOptions, type SmoothOptions } from '../camera/smooth';
 import type { TrackPoint } from '../import/types';
 import { bbox } from '../track/geo';
@@ -64,6 +65,8 @@ export interface TimelineOptions {
   /** Chase camera pitch in degrees. */
   pitch?: number;
   smoothing?: SmoothOptions;
+  /** Terrain heights: when given, the camera tilts down where a ridge would hide the marker. */
+  terrain?: { elevationAt: ElevationFn; exaggeration: number };
 }
 
 export const INTRO_HOLD = 1; // seconds of still overview before the camera moves
@@ -114,6 +117,19 @@ export function createTimeline(points: readonly TrackPoint[], options: TimelineO
     Math.min(viewport.width, viewport.height),
   );
 
+  const pitchAt = options.terrain
+    ? pitchProfile({
+        length,
+        center: (d) => smooth.center(d),
+        heading: (d) => smooth.heading(d),
+        elevationAt: options.terrain.elevationAt,
+        exaggeration: options.terrain.exaggeration,
+        viewportHeight: Math.min(viewport.width, viewport.height),
+        zoom: chaseZoom,
+        pitch,
+      })
+    : () => pitch;
+
   const overviewCamera: CameraState = { ...overview, pitch: 0, bearing: 0, offsetY: 0 };
   const outroCamera: CameraState = {
     ...overview,
@@ -127,7 +143,7 @@ export function createTimeline(points: readonly TrackPoint[], options: TimelineO
     return {
       center: smooth.center(distance),
       zoom: chaseZoom,
-      pitch,
+      pitch: pitchAt(distance),
       bearing: smooth.heading(distance),
       offsetY: CHASE_OFFSET_Y,
     };
