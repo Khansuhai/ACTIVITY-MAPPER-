@@ -45,7 +45,7 @@ describe('createTimeline', () => {
     expect(defaultMainDuration(0)).toBe(20);
     expect(defaultMainDuration(1_000_000)).toBe(120);
     expect(timeline.mainDuration).toBeCloseTo(40, 0);
-    expect(timeline.duration).toBeCloseTo(timeline.introDuration + timeline.mainDuration + 4, 9);
+    expect(timeline.duration).toBeCloseTo(timeline.introDuration + timeline.mainDuration + 5, 9);
   });
 
   it('holds a top-down overview at the start, then reaches the chase camera', () => {
@@ -87,9 +87,14 @@ describe('createTimeline', () => {
     expect(timeline.at(1e6)).toEqual(timeline.at(timeline.duration));
   });
 
+  it('uses the same chase zoom for portrait and landscape videos', () => {
+    const portrait = createTimeline(points, { viewport: { width: 720, height: 1280 } });
+    expect(portrait.chaseZoom).toBeCloseTo(timeline.chaseZoom, 9);
+  });
+
   it('respects a custom main duration and pitch', () => {
     const t = createTimeline(switchbacks(), { viewport: VIEWPORT, travelDuration: 15, pitch: 50 });
-    expect(t.duration).toBe(23);
+    expect(t.duration).toBe(24);
     expect(t.at(10).camera.pitch).toBe(50);
   });
 

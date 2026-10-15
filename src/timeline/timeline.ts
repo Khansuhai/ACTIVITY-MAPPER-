@@ -67,7 +67,8 @@ export interface TimelineOptions {
 }
 
 export const INTRO_HOLD = 1; // seconds of still overview before the camera moves
-export const OUTRO_HOLD = 1.5;
+/** Seconds the final overview holds still, under the end card. */
+export const OUTRO_HOLD = 2.5;
 export const CHASE_OFFSET_Y = 0.2;
 /** Default fraction of a travel segment spent accelerating (and again decelerating). */
 export const RAMP = 0.08;
@@ -89,7 +90,7 @@ export function createTimeline(points: readonly TrackPoint[], options: TimelineO
   const { length } = sampler;
   const smooth = createSmoothCamera(sampler, options.smoothing ?? defaultSmoothOptions(length));
   const introDuration = options.introDuration ?? 4;
-  const outroDuration = options.outroDuration ?? 4;
+  const outroDuration = options.outroDuration ?? 5;
   const travelDuration = options.travelDuration ?? defaultMainDuration(length);
   const schedule = buildSchedule(
     length,
@@ -105,7 +106,13 @@ export function createTimeline(points: readonly TrackPoint[], options: TimelineO
   const box = bbox(points);
   const midLat = (box[1] + box[3]) / 2;
   const overview = fitBounds(box, viewport);
-  const chaseZoom = zoomForGroundSpeed(length / travelDuration, midLat, viewport.height);
+  // The short side, not the height: a 9:16 video should show the ground at the same scale as a
+  // 16:9 one, not 1.78x further out.
+  const chaseZoom = zoomForGroundSpeed(
+    length / travelDuration,
+    midLat,
+    Math.min(viewport.width, viewport.height),
+  );
 
   const overviewCamera: CameraState = { ...overview, pitch: 0, bearing: 0, offsetY: 0 };
   const outroCamera: CameraState = {
