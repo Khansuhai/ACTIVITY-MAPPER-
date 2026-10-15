@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2">
+  <Document>
+    <name>Doc name</name>
+    <Placemark>
+      <name>Morning Run</name>
+      <gx:Track>
+        <when>2026-06-01T08:00:00Z</when>
+        <when>2026-06-01T08:00:10Z</when>
+        <when>2026-06-01T08:00:20Z</when>
+        <when>2026-06-01T08:00:30Z</when>
+        <when>2026-06-01T08:00:40Z</when>
+        <when>2026-06-01T08:00:50Z</when>
+        <when>2026-06-01T08:01:50Z</when>
+        <when>2026-06-01T08:02:00Z</when>
+        <when>2026-06-01T08:02:10Z</when>
+        <when>2026-06-01T08:02:20Z</when>
+        <when>2026-06-01T08:02:30Z</when>
+        <gx:coord>7.0000 46.0000 100</gx:coord>
+        <gx:coord>7.0000 46.0005 101</gx:coord>
+        <gx:coord>7.0000 46.0010 103</gx:coord>
+        <gx:coord>7.0000 46.0015 106</gx:coord>
+        <gx:coord>7.0000 46.0020 110</gx:coord>
+        <gx:coord>7.0000 46.0025 108</gx:coord>
+        <gx:coord>7.0000 46.0025 108</gx:coord>
+        <gx:coord>7.0000 46.0030 104</gx:coord>
+        <gx:coord>7.0000 46.0035 105</gx:coord>
+        <gx:coord>7.0000 46.0040 112</gx:coord>
+        <gx:coord>7.0000 46.0045 115</gx:coord>
+      </gx:Track>
+    </Placemark>
+  </Document>
+</kml>

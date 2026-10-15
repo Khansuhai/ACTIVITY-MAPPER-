@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Placemark>
+    <name>Planned route</name>
+    <LineString>
+      <coordinates>
+        7.0000,46.0000,100
+        7.0000,46.0005,101
+        7.0000,46.0010,103
+        7.0000,46.0015,106
+        7.0000,46.0020,110
+        7.0000,46.0025,108
+        7.0000,46.0030,104
+        7.0000,46.0035,105
+        7.0000,46.0040,112
+        7.0000,46.0045,115
+      </coordinates>
+    </LineString>
+  </Placemark>
+</kml>
