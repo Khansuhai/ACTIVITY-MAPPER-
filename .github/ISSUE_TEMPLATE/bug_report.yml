@@ -1,0 +1,41 @@
+name: Bug report
+description: Something doesn't work as it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Please don't attach files with private locations: shorten them, or
+        use the privacy zone and export a GPX first.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and version
+      placeholder: e.g. Chrome 152 on Windows 11, Safari 26 on iPhone
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Importing an activity file
+        - Map or 3D flyover
+        - Photos
+        - Video export
+        - Style, music or privacy zone
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: Files, screenshots or console errors
+      description: Drag files here. Browser console errors (F12) help a lot.
