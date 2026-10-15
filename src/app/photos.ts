@@ -12,6 +12,8 @@ export interface PhotoItem {
   display: Blob | null;
   thumb: ImageBitmap | null;
   error?: string;
+  /** Taken while recording: where and when are known exactly (epoch ms), so EXIF is ignored. */
+  recorded?: { lat: number; lon: number; time: number };
 }
 
 interface PhotosState {
@@ -19,6 +21,8 @@ interface PhotosState {
   /** Camera clock correction in minutes, added to every photo's time. */
   clockCorrectionMin: number;
   addFiles(files: File[]): void;
+  /** Photos taken in the recorder, pinned to the GPS position and time they were taken. */
+  addRecorded(photos: { file: File; lat: number; lon: number; time: number }[]): void;
   remove(id: string): void;
   clear(): void;
   setClockCorrection(minutes: number): void;
@@ -44,7 +48,12 @@ export const usePhotos = create<PhotosState>()((set, get) => {
     try {
       // exif.ts pulls in exifr (~60 kB): load it with the first photo, not with the app.
       const { readPhotoMeta } = await import('../photos/exif');
-      const meta = await readPhotoMeta(await item.file.arrayBuffer());
+      let meta = await readPhotoMeta(await item.file.arrayBuffer());
+      if (item.recorded) {
+        // Recorded instants are true UTC: store them with a zero offset.
+        const { lat, lon, time } = item.recorded;
+        meta = { ...meta, gps: { lat, lon }, localTime: time, utcOffsetMinutes: 0 };
+      }
       const display = await displayableBlob(item.file, meta.heif);
       const thumb = await makeThumbnail(display);
       if (!get().items.some((p) => p.id === item.id)) {
@@ -89,6 +98,21 @@ export const usePhotos = create<PhotosState>()((set, get) => {
           thumb: null,
         }));
       if (added.length === 0) return;
+      set((s) => ({ items: [...s.items, ...added] }));
+      queue.push(...added);
+      pump();
+    },
+    addRecorded(photos) {
+      const added: PhotoItem[] = photos.map(({ file, lat, lon, time }) => ({
+        id: crypto.randomUUID(),
+        name: file.name,
+        file,
+        status: 'reading',
+        meta: null,
+        display: null,
+        thumb: null,
+        recorded: { lat, lon, time },
+      }));
       set((s) => ({ items: [...s.items, ...added] }));
       queue.push(...added);
       pump();

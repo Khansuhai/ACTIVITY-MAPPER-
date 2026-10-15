@@ -1,0 +1,2 @@
+minimumReleaseAgeExclude:
+  - '@capacitor/filesystem@8.1.5'

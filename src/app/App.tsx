@@ -40,6 +40,7 @@ import { useLook } from './look';
 import { isPhotoFile, usePhotos } from './photos';
 import { usePhotoPlacements } from './placement';
 import { usePlayer } from './player';
+import { type Trip, tripToTrack } from '../record/trip';
 
 const SAMPLE_URL = './samples/sample-hike.gpx';
 
@@ -48,7 +49,13 @@ interface Loaded {
   fileName: string;
 }
 
-export function App() {
+/** A recorded trip sent from "My trips" to the studio. */
+export interface OpenedTrip {
+  trip: Trip;
+  photos: Record<string, Blob>;
+}
+
+export function App({ opened = null }: { opened?: OpenedTrip | null }) {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -72,6 +79,31 @@ export function App() {
       setBusy(false);
     }
   }, []);
+
+  // A trip from "My trips": its route, its name as the title, and its photos pinned where taken.
+  const [shownTrip, setShownTrip] = useState(opened);
+  if (opened !== shownTrip) {
+    setShownTrip(opened);
+    if (opened) {
+      setError(null);
+      setLoaded({ track: tripToTrack(opened.trip), fileName: opened.trip.name });
+    }
+  }
+  useEffect(() => {
+    if (!opened) return;
+    const { trip, photos } = opened;
+    usePlayer.getState().reset();
+    useLook.getState().set({ title: null, moments: [] });
+    usePhotos.getState().clear();
+    usePhotos.getState().addRecorded(
+      trip.photos.flatMap((p, i) => {
+        const blob = photos[p.id];
+        if (!blob) return [];
+        const file = new File([blob], `photo-${i + 1}.jpg`, { type: blob.type || 'image/jpeg' });
+        return [{ file, lat: p.lat, lon: p.lon, time: p.time }];
+      }),
+    );
+  }, [opened]);
 
   const loadFile = useCallback(
     (file: File) => void load(file.name, () => file.arrayBuffer()),

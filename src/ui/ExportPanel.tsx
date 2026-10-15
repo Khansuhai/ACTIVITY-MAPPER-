@@ -12,6 +12,7 @@ import {
   RESOLUTIONS,
   videoSize,
 } from '../export/plan';
+import { shareFile } from '../record/platform';
 import { formatDuration } from './format';
 
 interface ExportPanelProps {
@@ -25,7 +26,13 @@ interface ExportPanelProps {
 type Status =
   | { kind: 'idle' }
   | { kind: 'running'; progress: ExportProgress | null }
-  | { kind: 'done'; url: string | null; savedTo: string | null; sizeMb: number | null }
+  | {
+      kind: 'done';
+      blob: Blob | null;
+      url: string | null;
+      savedTo: string | null;
+      sizeMb: number | null;
+    }
   | { kind: 'error'; message: string };
 
 const RESOLUTION_LABELS: Record<Resolution, string> = {
@@ -84,6 +91,7 @@ export function ExportPanel({ base, length, fileName }: ExportPanelProps) {
       );
       setStatus({
         kind: 'done',
+        blob,
         url: blob ? URL.createObjectURL(blob) : null,
         savedTo: file ? file.name : null,
         sizeMb: blob ? blob.size / 1e6 : null,
@@ -216,9 +224,22 @@ export function ExportPanel({ base, length, fileName }: ExportPanelProps) {
           {status.kind === 'done' && (
             <div className="rounded-md border border-emerald-800 bg-emerald-950/50 p-3 text-sm text-emerald-200">
               {status.url ? (
-                <a href={status.url} download={fileName} className="font-semibold underline">
-                  Save video ({status.sizeMb?.toFixed(1)} MB)
-                </a>
+                <div className="flex flex-wrap items-center gap-3">
+                  <a href={status.url} download={fileName} className="font-semibold underline">
+                    Save video ({status.sizeMb?.toFixed(1)} MB)
+                  </a>
+                  {status.blob && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void shareFile(status.blob!, fileName, fileName).catch(() => undefined)
+                      }
+                      className="rounded-md bg-emerald-700 px-3 py-1 font-semibold text-white hover:bg-emerald-600"
+                    >
+                      Share…
+                    </button>
+                  )}
+                </div>
               ) : (
                 <span>Saved to {status.savedTo}.</span>
               )}
