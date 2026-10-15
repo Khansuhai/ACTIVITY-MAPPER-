@@ -24,7 +24,16 @@ feature we need (raster-dem terrain, hillshade, sky, globe). Breaking changes th
   for Phase 4 export) has WebGL2.
 - `GeoJSONSource.setData` lost its second argument and no longer returns `this`.
 
-Starting on v6 avoids a migration later. Reverting to v5 would only touch `src/ui/RouteMap.tsx`.
+- Bundlers must call `setWorkerUrl()` once. With Vite that is
+  `import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'` (see
+  `src/render/maplibre.ts`). Without it the build silently ships no worker and tiles never load.
+- `map.isStyleLoaded()` stays false while tiles are loading, long after `style.load` fired, so we
+  track style readiness with our own flag before adding route layers.
+- Useful for Phase 4: v6 exports `setNow()` / `restoreNow()` to freeze MapLibre's animation clock,
+  which should help deterministic frame-by-frame rendering.
+
+Starting on v6 avoids a migration later. Reverting to v5 would only touch `src/ui/RouteMap.tsx` and
+`src/render/maplibre.ts`.
 
 ### D3. TypeScript 6.0, not 7.0
 
@@ -51,16 +60,30 @@ routes (Komoot, route GPX) often have no timestamps, and some devices drop eleva
 time show "–" instead of guessing. `time` is epoch milliseconds (cheap arithmetic, no Date objects in
 hot loops).
 
-### D7. Parsers: `@tmcw/togeojson` for XML formats, `fit-file-parser` for FIT
+### D7. Own small XML parsers instead of `@tmcw/togeojson`; `fit-file-parser` for FIT
 
-- `@tmcw/togeojson` 7.1 (BSD-2-Clause) handles GPX, TCX and KML (`gx:Track`) and exposes per-point
-  times and heart rate as `coordinateProperties`. It needs a DOM `Document`: the browser's
-  `DOMParser` in the app, jsdom in tests.
+The spec suggested `@tmcw/togeojson`. Reading its source (v7.1.3) showed it returns per-point data
+as **parallel arrays that can drift out of line with the coordinates**:
+
+- GPX: a `<trkpt>` without `<time>` is skipped in `times`, so every later timestamp shifts by one.
+- TCX: trackpoints without a GPS fix are dropped from the coordinates, but extension values are
+  still indexed by the original position; heart rates are only pushed when present.
+- TCX: every `<Lap>` becomes a separate feature.
+
+The flyover timeline and photo matching depend on each point having _its own_ time, so a silent
+one-point shift would be a nasty bug. Our own DOM-based parsers (`src/import/{gpx,tcx,kml}.ts`,
+about 150 lines total) build one object per point, so fields can't drift. They match elements by
+local name in any namespace (`gpxtpx:hr`, `ns3:Watts`, `gx:coord`). This follows the working rule
+"don't add a library when a few lines will do". The fixtures include invalid points and HR-only
+samples specifically to test alignment.
+
 - `fit-file-parser` 6.2 (MIT) parses Garmin/COROS/Suunto/Polar `.fit` files in the browser (it
   bundles the `buffer` polyfill) and converts semicircles to degrees. Its built-in `FitEncoder` lets
-  us generate a FIT test fixture from a script instead of committing someone's real activity.
+  us generate a FIT test fixture from a script instead of committing someone's real activity. It is
+  **lazy-loaded** (`import('./fit')`): its profile tables add ~290 kB that GPX users never need.
 - Format detection sniffs content (`.FIT` signature at byte 8, XML root element) and only falls back
   to the file extension, so a misnamed file still works.
+- Points at exactly (0, 0) are dropped: several devices write that before the first GPS fix.
 
 ### D8. No Turf.js or Zustand yet
 
@@ -72,19 +95,21 @@ come in Phase 2, when they pay for themselves.
 ### D9. How the stats are computed
 
 All stats are computed from the points, so they will match what the user sees once track cleaning
-(Phase 2+) is applied. Definitions:
+(Phase 2+) is applied. Definitions (constants in `src/track/stats.ts`):
 
 - **Distance**: sum of haversine distances, mean Earth radius 6 371 008.8 m (IUGG).
 - **Elapsed time**: last timestamp minus first.
-- **Moving time**: sum of segment durations where segment speed ≥ 0.5 m/s (1.8 km/h) and the gap is
-  ≤ 5 minutes. This excludes stops and auto-pauses.
+- **Moving time**: sum of segment durations where segment speed ≥ 0.3 m/s (≈ 1.1 km/h) and the gap
+  is ≤ 5 minutes. We started at 0.5 m/s, but on the sample hike steep switchbacks (Tobler's hiking
+  function gives ~0.35 m/s horizontal at 40 % grade) were counted as stopped: 2:41 instead of 3:01.
 - **Average speed**: distance ÷ moving time (the convention used by Strava and Garmin Connect).
-- **Max speed**: the fastest speed over any window of at least 5 seconds, so a single GPS spike
-  (one bad point) cannot produce a 200 km/h max. Phase 2's spike filter will make this even more
-  robust.
-- **Elevation gain/loss**: hysteresis with a 3 m threshold. Elevation only counts as gained once it
-  has risen 3 m above the last low point. Raw GPS altitude noise would otherwise inflate gain by
-  20 to 50 %. Barometric data from watches is smoother, so the threshold costs little accuracy there.
+- **Max speed**: the maximum of a rolling **median of 5 consecutive segment speeds**. One bad GPS
+  point creates two absurd segments (out to the spike and back); a 5-wide median ignores both. A
+  simple 5-second average does _not_ work: path length through a spike is still huge.
+- **Elevation gain/loss**: two steps. (1) Average elevation over ±30 m of _along-track distance_:
+  by distance, not point count, so a 12-minute stop full of jittery samples collapses into one
+  value. (2) Hysteresis with a 3 m threshold. The 3 m hysteresis alone gave 965 m on the sample hike
+  whose true climb is 820 m; with smoothing it gives 819 m. Min/max elevation use raw values.
 
 Device-reported totals (FIT `session` messages) are not used yet. They can disagree with our numbers
 because each vendor uses its own smoothing. Showing them side by side is a possible later feature.
@@ -103,18 +128,25 @@ A typical 3-hour FIT file (~10 000 points) parses in well under 100 ms. Moving p
 Worker (`src/workers/`) is planned once multi-file import or photo EXIF scanning lands, so the UI
 stays responsive with large inputs.
 
+### D12. A synthetic sample activity
+
+"Try a sample" loads `public/samples/sample-hike.gpx`, generated by `scripts/make-sample-gpx.ts`
+(deterministic PRNG, Tobler's hiking function for speed, correlated GPS drift, altitude noise, a
+lunch stop). It is synthetic on purpose: the repo contains nobody's real location history, and
+because we know the true answers (820 m climb, 12-minute stop), it doubles as a realism check
+for the stats. It caught both problems described in D9.
+
 ### Dependency licenses (Phase 1)
 
-| Package                                    | License      | Use                 |
-| ------------------------------------------ | ------------ | ------------------- |
-| react, react-dom                           | MIT          | UI                  |
-| maplibre-gl                                | BSD-3-Clause | Map rendering       |
-| @tmcw/togeojson                            | BSD-2-Clause | GPX/TCX/KML parsing |
-| fit-file-parser (+ buffer)                 | MIT          | FIT parsing         |
-| vite, @vitejs/plugin-react, vitest         | MIT          | Build and tests     |
-| tailwindcss, @tailwindcss/vite             | MIT          | Styling             |
-| typescript                                 | Apache-2.0   | Language            |
-| eslint, typescript-eslint, prettier, jsdom | MIT          | Tooling             |
+| Package                                    | License      | Use             |
+| ------------------------------------------ | ------------ | --------------- |
+| react, react-dom                           | MIT          | UI              |
+| maplibre-gl                                | BSD-3-Clause | Map rendering   |
+| fit-file-parser (+ buffer)                 | MIT          | FIT parsing     |
+| vite, @vitejs/plugin-react, vitest         | MIT          | Build and tests |
+| tailwindcss, @tailwindcss/vite             | MIT          | Styling         |
+| typescript                                 | Apache-2.0   | Language        |
+| eslint, typescript-eslint, prettier, jsdom | MIT          | Tooling         |
 
 Looking ahead: **Mediabunny** (Phase 4 MP4 muxing) is **MPL-2.0**. That is file-level copyleft: we
 can use it unmodified from an MIT app. If we ever patch its files, those patched files must stay
