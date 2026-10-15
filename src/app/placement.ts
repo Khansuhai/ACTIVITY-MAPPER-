@@ -3,6 +3,7 @@ import type { Track } from '../import';
 import { estimateClockCorrection, placePhoto, TrackIndex, type Placement } from '../photos/place';
 import { photoInstant } from '../photos/time';
 import type { PhotoStop } from '../timeline/timeline';
+import { inPrivacyZone } from '../track/privacy';
 import { createSampler } from '../track/sampler';
 import { type PhotoItem, usePhotos } from './photos';
 
@@ -22,8 +23,21 @@ export interface PhotoPlacements {
   suggestedCorrectionMin: number | null;
 }
 
-/** Places every ready photo on the track; recomputed when photos, track or clock change. */
-export function usePhotoPlacements(track: Track | null): PhotoPlacements {
+export interface PrivacyZones {
+  zones: readonly { lat: number; lon: number }[];
+  radius: number;
+}
+
+const NO_PRIVACY: PrivacyZones = { zones: [], radius: 0 };
+
+/**
+ * Places every ready photo on the (visible part of the) track; recomputed when photos, track or
+ * clock change. Photos taken inside a privacy zone are left out, so they can't reveal home.
+ */
+export function usePhotoPlacements(
+  track: Track | null,
+  privacy: PrivacyZones = NO_PRIVACY,
+): PhotoPlacements {
   const items = usePhotos((s) => s.items);
   const correctionMin = usePhotos((s) => s.clockCorrectionMin);
   const index = useMemo(() => (track ? new TrackIndex(track.points) : null), [track]);
@@ -40,7 +54,10 @@ export function usePhotoPlacements(track: Track | null): PhotoPlacements {
       if (!index || !sampler || item.status !== 'ready' || !item.meta) {
         return { item, time, placement: null, position: null };
       }
-      const placement = placePhoto(index, { gps: item.meta.gps, time });
+      const placement: Placement =
+        item.meta.gps && inPrivacyZone(privacy.zones, privacy.radius, item.meta.gps)
+          ? { method: 'none', reason: 'privacy' }
+          : placePhoto(index, { gps: item.meta.gps, time });
       const position =
         placement.method === 'none'
           ? null
@@ -68,5 +85,5 @@ export function usePhotoPlacements(track: Track | null): PhotoPlacements {
       suggestedCorrectionMin = ms === null ? null : ms / 60_000;
     }
     return { photos, stops, suggestedCorrectionMin };
-  }, [items, correctionMin, index, sampler]);
+  }, [items, correctionMin, index, sampler, privacy]);
 }

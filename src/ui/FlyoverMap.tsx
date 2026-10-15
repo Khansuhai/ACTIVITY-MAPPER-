@@ -9,8 +9,10 @@ import { dotSpacing } from '../render/dots';
 import {
   addScene,
   applyCamera,
+  type MapLabels,
   type PhotoPin,
   RouteLayers,
+  type RouteLook,
   setExaggeration,
 } from '../render/scene';
 import type { Viewport } from '../camera/camera';
@@ -22,6 +24,8 @@ interface FlyoverMapProps {
   basemap: Basemap;
   terrain: TerrainSource;
   pins: readonly PhotoPin[];
+  look: RouteLook;
+  labels: MapLabels;
   onViewportChange(viewport: Viewport): void;
 }
 
@@ -35,12 +39,14 @@ export function FlyoverMap({
   basemap,
   terrain,
   pins,
+  look,
+  labels,
   onViewportChange,
 }: FlyoverMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   // Latest props for MapLibre event handlers, which outlive a single render.
-  const latest = useRef({ track, timeline, basemap, terrain, pins });
+  const latest = useRef({ track, timeline, basemap, terrain, pins, look, labels });
   const styleReadyRef = useRef(false);
   const routeRef = useRef<RouteLayers | null>(null);
   const basemapIdRef = useRef(basemap.id);
@@ -49,7 +55,7 @@ export function FlyoverMap({
   const [hasWebGL2] = useState(supportsWebGL2);
 
   useEffect(() => {
-    latest.current = { track, timeline, basemap, terrain, pins };
+    latest.current = { track, timeline, basemap, terrain, pins, look, labels };
   });
 
   // Create the map once.
@@ -75,12 +81,13 @@ export function FlyoverMap({
 
     // A style switch replaces everything, so rebuild the scene whenever a style finishes loading.
     map.on('style.load', () => {
-      const { track, timeline, basemap, terrain, pins } = latest.current;
+      const { track, timeline, basemap, terrain, pins, look, labels } = latest.current;
       addScene(map, basemap, terrain, usePlayer.getState().exaggeration);
       routeRef.current = new RouteLayers(map);
       styleReadyRef.current = true;
-      showRoute(map, routeRef.current, track, timeline);
+      showRoute(map, routeRef.current, track, timeline, look);
       routeRef.current.setPhotos(pins);
+      routeRef.current.setLabels(labels);
     });
     mapRef.current = map;
     // Debug handle for the browser console during development; stripped from production builds.
@@ -106,8 +113,13 @@ export function FlyoverMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !routeRef.current || !styleReadyRef.current) return;
-    showRoute(map, routeRef.current, track, timeline);
-  }, [track, timeline]);
+    showRoute(map, routeRef.current, track, timeline, look);
+  }, [track, timeline, look]);
+
+  // Peak labels and highlights.
+  useEffect(() => {
+    if (styleReadyRef.current) routeRef.current?.setLabels(labels);
+  }, [labels]);
 
   // Photo pins.
   useEffect(() => {
@@ -169,13 +181,14 @@ function showRoute(
   route: RouteLayers,
   track: Track | null,
   timeline: Timeline | null,
+  look: RouteLook,
 ) {
   if (!track || !timeline) {
-    route.set(null, 1);
+    route.set(null, 1, look);
     return;
   }
   const frame = timeline.at(usePlayer.getState().time);
-  route.set(track, dotSpacing(timeline.length, timeline.chaseZoom, frame.position.lat));
+  route.set(track, dotSpacing(timeline.length, timeline.chaseZoom, frame.position.lat), look);
   applyCamera(map, frame);
   route.update(frame.distance);
 }

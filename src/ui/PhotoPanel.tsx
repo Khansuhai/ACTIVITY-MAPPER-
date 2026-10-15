@@ -150,6 +150,7 @@ function PhotoTile({
                     'no-metadata': 'No GPS or time in this photo, so it cannot be placed',
                     'off-route': 'Taken more than 1 km from the route',
                     'outside-activity': 'Taken outside the activity (check the camera clock)',
+                    privacy: 'Taken inside the privacy zone, so it is not shown',
                   }[placement.reason],
                   tone: 'bg-amber-600',
                 };

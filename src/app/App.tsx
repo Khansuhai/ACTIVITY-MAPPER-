@@ -4,9 +4,14 @@ import { DEFAULT_TERRAIN } from '../basemaps/terrain';
 import type { Viewport } from '../camera/camera';
 import { exportTimeline } from '../export/timing';
 import { ACCEPTED_EXTENSIONS, ImportError, importActivity, type Track } from '../import';
+import { iconForSport, type MarkerChoice } from '../render/icons';
 import type { OverlayModel } from '../render/overlays';
-import type { PhotoPin } from '../render/scene';
+import type { MapLabels, PhotoPin, RouteLook } from '../render/scene';
+import { getTheme, type Theme } from '../render/theme';
+import { availableColorings, buildColoring } from '../track/colorize';
+import { findHighlights, type Highlight } from '../track/highlights';
 import { createLiveStats, elevationProfile } from '../track/live';
+import { applyPrivacyZone, inPrivacyZone } from '../track/privacy';
 import { computeStats } from '../track/stats';
 import { ExportPanel } from '../ui/ExportPanel';
 import { FlyoverMap } from '../ui/FlyoverMap';
@@ -21,10 +26,13 @@ import {
 } from '../ui/format';
 import { FrameOverlay } from '../ui/FrameOverlay';
 import { PhotoPanel } from '../ui/PhotoPanel';
+import { StylePanel } from '../ui/StylePanel';
+import { useMusicSync } from '../ui/useMusicSync';
 import { PlayerControls } from '../ui/PlayerControls';
 import { StatsPanel } from '../ui/StatsPanel';
 import { useFileDrop } from '../ui/useFileDrop';
 import { aspectRatio, autoLength, useExportSettings } from './exportSettings';
+import { useLook } from './look';
 import { isPhotoFile, usePhotos } from './photos';
 import { usePhotoPlacements } from './placement';
 import { usePlayer } from './player';
@@ -85,21 +93,101 @@ export function App() {
   const dragging = useFileDrop(loadFiles);
   const stats = useMemo(() => (loaded ? computeStats(loaded.track.points) : null), [loaded]);
   const basemap = getBasemap(basemapId);
-  const placements = usePhotoPlacements(loaded?.track ?? null);
+  const look = useLook();
+  const theme = getTheme(look.themeId);
+
+  // Privacy zone: everything shown (map, timeline, photos) uses the visible part of the route;
+  // live stats and the end card still count the whole activity.
+  const privacy = useMemo(
+    () => (loaded ? applyPrivacyZone(loaded.track.points, look.privacyRadius) : null),
+    [loaded, look.privacyRadius],
+  );
+  const shown = useMemo(
+    () => (loaded && privacy ? { ...loaded.track, points: privacy.points } : null),
+    [loaded, privacy],
+  );
+  const privacyZones = useMemo(
+    () => ({ zones: privacy?.zones ?? [], radius: look.privacyRadius }),
+    [privacy, look.privacyRadius],
+  );
+  const privacyNote =
+    loaded && look.privacyRadius > 0 && privacy?.zones.length === 0
+      ? 'The whole route is inside the privacy zone, so nothing was hidden. Use a smaller radius.'
+      : null;
+
+  const placements = usePhotoPlacements(shown, privacyZones);
   const aspect = useExportSettings((s) => s.aspect);
   const chosenLength = useExportSettings((s) => s.length);
   const length = chosenLength ?? autoLength(stats?.distance ?? 0, placements.stops.length);
   // The preview uses the export's timing, so what plays here is what gets exported. The
   // viewport matters too: the overview zoom fits the route to the map's size.
   const timeline = useMemo(
+    () => (shown && viewport ? exportTimeline(shown, viewport, length, placements.stops) : null),
+    [shown, viewport, length, placements.stops],
+  );
+
+  const colorings = useMemo(
+    () => (shown ? availableColorings(shown.points) : ['solid' as const]),
+    [shown],
+  );
+  const colorBy = colorings.includes(look.colorBy) ? look.colorBy : 'solid';
+  const coloring = useMemo(
+    () => (shown ? buildColoring(shown.points, colorBy, theme.route) : null),
+    [shown, colorBy, theme.route],
+  );
+  const autoIcon = iconForSport(loaded?.track.sport ?? null);
+  const marker = useMemo<MarkerChoice>(() => {
+    if (look.marker === 'custom' && look.customIcon)
+      return { kind: 'custom', bitmap: look.customIcon };
+    const id =
+      look.marker === 'auto'
+        ? autoIcon
+        : look.marker === 'dot' || look.marker === 'custom'
+          ? null
+          : look.marker;
+    return id ? { kind: 'icon', id } : { kind: 'dot' };
+  }, [look.marker, look.customIcon, autoIcon]);
+  const routeLook = useMemo<RouteLook>(
+    () => ({
+      color: theme.route,
+      coloring: coloring ?? buildColoring([], 'solid', theme.route),
+      marker,
+    }),
+    [theme.route, coloring, marker],
+  );
+
+  // Highlights are found on the whole activity, but never shown inside a privacy zone.
+  const highlights = useMemo(
     () =>
-      loaded && viewport ? exportTimeline(loaded.track, viewport, length, placements.stops) : null,
-    [loaded, viewport, length, placements.stops],
+      loaded && look.showHighlights
+        ? findHighlights(loaded.track.points).filter(
+            (h) => !inPrivacyZone(privacyZones.zones, privacyZones.radius, h),
+          )
+        : [],
+    [loaded, look.showHighlights, privacyZones],
   );
+  const pace = prefersPace(loaded?.track.sport ?? null);
+  const labels = useMemo<MapLabels>(
+    () => ({
+      peaks: look.showPeaks,
+      lightText: basemap.lightText,
+      color: theme.route,
+      highlights: highlights.map((h) => ({
+        ...h,
+        label: highlightLabel(h, pace).replace(' · ', '\n'),
+      })),
+    }),
+    [look.showPeaks, basemap.lightText, theme.route, highlights, pace],
+  );
+
   const model = useMemo(
-    () => (loaded && stats ? overlayModel(loaded, stats) : null),
-    [loaded, stats],
+    () =>
+      loaded && stats
+        ? overlayModel(loaded, stats, theme, privacy?.hiddenStartM ?? 0, highlights)
+        : null,
+    [loaded, stats, theme, privacy, highlights],
   );
+  useMusicSync(look.music?.url ?? null, timeline?.duration ?? 0, look.musicVolume);
   const pins = useMemo<PhotoPin[]>(
     () =>
       placements.photos.flatMap((p) =>
@@ -178,17 +266,30 @@ export function App() {
 
         <PhotoPanel placements={placements} timeline={timeline} hasTrack={!!loaded} />
 
+        {loaded && (
+          <StylePanel
+            colorings={colorings}
+            legend={coloring?.legend ?? null}
+            autoIcon={autoIcon}
+            privacyNote={privacyNote}
+          />
+        )}
+
         <ExportPanel
           base={
-            loaded && model
+            shown && model
               ? {
-                  track: loaded.track,
+                  track: shown,
                   basemap,
                   terrain: DEFAULT_TERRAIN,
                   exaggeration: usePlayer.getState().exaggeration,
                   stops: placements.stops,
                   photoBlobs,
                   pins,
+                  look: routeLook,
+                  labels,
+                  music: look.music?.buffer ?? null,
+                  musicVolume: look.musicVolume,
                   // Burned into the video, as the map and terrain licences require.
                   model: {
                     ...model,
@@ -235,11 +336,13 @@ export function App() {
             }}
           >
             <FlyoverMap
-              track={loaded?.track ?? null}
+              track={shown}
               timeline={timeline}
               basemap={basemap}
               terrain={DEFAULT_TERRAIN}
               pins={pins}
+              look={routeLook}
+              labels={labels}
               onViewportChange={setViewport}
             />
             <FrameOverlay timeline={timeline} blobs={photoBlobs} model={model} />
@@ -256,7 +359,13 @@ export function App() {
   );
 }
 
-function overlayModel(loaded: Loaded, stats: ReturnType<typeof computeStats>): OverlayModel {
+function overlayModel(
+  loaded: Loaded,
+  stats: ReturnType<typeof computeStats>,
+  theme: Theme,
+  distanceOffset: number,
+  highlights: Highlight[],
+): OverlayModel {
   const { track, fileName } = loaded;
   const pace = prefersPace(track.sport);
   const sport = track.sport ? track.sport.charAt(0).toUpperCase() + track.sport.slice(1) : null;
@@ -276,8 +385,16 @@ function overlayModel(loaded: Loaded, stats: ReturnType<typeof computeStats>): O
     live: createLiveStats(track.points),
     profile: elevationProfile(track.points),
     pace,
+    accent: theme.accent,
+    distanceOffset,
+    highlights: highlights.map((h) => ({ distance: h.distance, label: highlightLabel(h, pace) })),
     attribution: null,
   };
+}
+
+function highlightLabel(h: Highlight, pace: boolean): string {
+  if (h.kind === 'highest') return `Highest point · ${formatElevation(h.value)}`;
+  return `Fastest km · ${pace ? formatPace(1000 / h.value) : formatSpeed(1000 / h.value)}`;
 }
 
 function slug(text: string): string {

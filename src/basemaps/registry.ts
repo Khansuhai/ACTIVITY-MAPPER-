@@ -17,6 +17,8 @@ export interface Basemap {
   needsKey: boolean;
   /** Draw hillshade over this basemap (not needed for photos of the ground). */
   hillshade: boolean;
+  /** Labels we add (peaks, highlights) use white text: for imagery and dark maps. */
+  lightText: boolean;
   sky: SkySpecification;
 }
 
@@ -57,6 +59,7 @@ export const BASEMAPS = [
     license: OPENFREEMAP_LICENSE,
     needsKey: false,
     hillshade: true,
+    lightText: false,
     sky: LIGHT_SKY,
   },
   {
@@ -64,6 +67,8 @@ export const BASEMAPS = [
     name: 'Satellite',
     style: {
       version: 8,
+      // Fonts for the peak and highlight labels we add on top.
+      glyphs: 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf',
       sources: {
         satellite: {
           type: 'raster',
@@ -77,12 +82,14 @@ export const BASEMAPS = [
       },
       layers: [{ id: 'satellite', type: 'raster', source: 'satellite' }],
     },
-    attribution: EOX_ATTRIBUTION,
+    // Peak labels come from OpenStreetMap via OpenFreeMap.
+    attribution: `${EOX_ATTRIBUTION} · Labels: ${OPENFREEMAP_ATTRIBUTION}`,
     license:
       'EOX Sentinel-2 cloudless 2016 edition: CC BY 4.0, commercial use allowed with attribution ' +
       '(WMTS capabilities, checked 2026-10). Later editions (2017+) are CC BY-NC-SA and are NOT used.',
     needsKey: false,
     hillshade: false,
+    lightText: true,
     sky: LIGHT_SKY,
   },
   {
@@ -93,6 +100,7 @@ export const BASEMAPS = [
     license: OPENFREEMAP_LICENSE,
     needsKey: false,
     hillshade: true,
+    lightText: false,
     sky: LIGHT_SKY,
   },
   {
@@ -103,6 +111,7 @@ export const BASEMAPS = [
     license: OPENFREEMAP_LICENSE,
     needsKey: false,
     hillshade: true,
+    lightText: true,
     sky: DARK_SKY,
   },
 ] as const satisfies readonly Basemap[];

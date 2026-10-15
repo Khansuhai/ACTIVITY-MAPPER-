@@ -11,7 +11,7 @@ const PASS_TOLERANCE_M = 60;
 export type Placement =
   | { method: 'gps'; distance: number; offRouteM: number }
   | { method: 'time'; distance: number }
-  | { method: 'none'; reason: 'no-metadata' | 'off-route' | 'outside-activity' };
+  | { method: 'none'; reason: 'no-metadata' | 'off-route' | 'outside-activity' | 'privacy' };
 
 export interface PhotoInput {
   gps: { lat: number; lon: number } | null;

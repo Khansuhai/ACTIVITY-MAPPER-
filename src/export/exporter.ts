@@ -1,13 +1,16 @@
 import { Map as MapLibreMap } from 'maplibre-gl';
 import {
+  AudioBufferSource,
   BufferTarget,
   CanvasSource,
+  getFirstEncodableAudioCodec,
   getFirstEncodableVideoCodec,
   Mp4OutputFormat,
   Output,
   StreamTarget,
   type VideoCodec,
 } from 'mediabunny';
+import { renderSoundtrack } from '../audio/mix';
 import type { Basemap } from '../basemaps/registry';
 import type { TerrainSource } from '../basemaps/terrain';
 import type { Track } from '../import';
@@ -16,7 +19,14 @@ import { composeFrame, photoDecodeSize } from '../render/compose';
 import { dotSpacing } from '../render/dots';
 import '../render/maplibre';
 import type { OverlayModel } from '../render/overlays';
-import { addScene, applyCamera, type PhotoPin, RouteLayers } from '../render/scene';
+import {
+  addScene,
+  applyCamera,
+  type MapLabels,
+  type PhotoPin,
+  RouteLayers,
+  type RouteLook,
+} from '../render/scene';
 import type { PhotoStop } from '../timeline/timeline';
 import {
   type Aspect,
@@ -42,7 +52,12 @@ export interface ExportOptions {
   stops: readonly PhotoStop[];
   photoBlobs: ReadonlyMap<string, Blob>;
   pins: readonly PhotoPin[];
+  look: RouteLook;
+  labels: MapLabels;
   model: OverlayModel;
+  /** Music to mix in (looped, faded), or null for a silent video. */
+  music: AudioBuffer | null;
+  musicVolume: number;
   /** Stream into this file (File System Access API), or null to build the video in memory. */
   file: FileSystemFileHandle | null;
 }
@@ -125,8 +140,11 @@ export async function exportVideo(
     route.set(
       options.track,
       dotSpacing(timeline.length, timeline.chaseZoom, timeline.at(0).position.lat),
+      options.look,
+      pixelRatio,
     );
     route.setPhotos(options.pins, pixelRatio);
+    route.setLabels(options.labels, pixelRatio);
 
     const canvas = new OffscreenCanvas(width, height);
     const ctx = canvas.getContext('2d', { alpha: false })!;
@@ -152,7 +170,29 @@ export async function exportVideo(
       ...(codec.fullCodecString ? { fullCodecString: codec.fullCodecString } : {}),
     });
     output.addVideoTrack(source, { frameRate: fps });
+
+    // Soundtrack: AAC plays everywhere; Opus where AAC can't be encoded (Firefox).
+    let audio: AudioBufferSource | null = null;
+    let soundtrack: AudioBuffer | null = null;
+    if (options.music) {
+      const audioCodec = await getFirstEncodableAudioCodec(['aac', 'opus'], {
+        numberOfChannels: 2,
+        sampleRate: 48_000,
+        bitrate: 192_000,
+      });
+      if (audioCodec) {
+        soundtrack = await renderSoundtrack(options.music, timeline.duration, options.musicVolume);
+        audio = new AudioBufferSource({ codec: audioCodec, bitrate: 192_000 });
+        output.addAudioTrack(audio);
+      } else {
+        console.warn('No audio encoder available: exporting without music.');
+      }
+    }
     await output.start();
+    if (audio && soundtrack) {
+      await audio.add(soundtrack);
+      audio.close();
+    }
 
     const started = performance.now();
     const photoSize = photoDecodeSize(width, height);

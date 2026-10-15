@@ -19,12 +19,22 @@ export interface OverlayModel {
   profile: ElevationProfile | null;
   /** Show pace (min/km) instead of speed. */
   pace: boolean;
+  /** Theme accent for numbers and the profile. */
+  accent: string;
+  /**
+   * Metres of route hidden at the start by the privacy zone. Live stats and the profile use the
+   * full route, so they add this to the frame's distance and the numbers stay true.
+   */
+  distanceOffset: number;
+  /** Captions shown while passing a point (full-route distances). */
+  highlights: { distance: number; label: string }[];
   /** Burned into the corner of exported videos; the preview shows MapLibre's control instead. */
   attribution: string | null;
 }
 
 const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
-const ORANGE = '#f97316';
+/** Highlight captions show while within this many metres of the point. */
+const HIGHLIGHT_RANGE_M = 250;
 
 type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 
@@ -64,8 +74,10 @@ export function drawOverlays(
   ctx.save();
   if (o.hud > 0) {
     drawBottomShade(ctx, width, height, k, o.hud);
-    drawLiveStats(ctx, k, frame, model, o.hud);
-    if (model.profile) drawProfile(ctx, width, height, k, frame.distance, model.profile, o.hud);
+    const d = frame.distance + model.distanceOffset;
+    drawLiveStats(ctx, k, d, model, o.hud);
+    if (model.profile) drawProfile(ctx, width, height, k, d, model.profile, model.accent, o.hud);
+    drawHighlight(ctx, width, k, d, model, o.hud);
   }
   if (o.title > 0) drawTitle(ctx, width, height, k, model, o.title);
   if (o.end > 0) drawEndCard(ctx, width, height, k, model, o.end);
@@ -73,8 +85,8 @@ export function drawOverlays(
   ctx.restore();
 }
 
-function drawLiveStats(ctx: Ctx, k: number, frame: Frame, model: OverlayModel, alpha: number) {
-  const v = model.live.at(frame.distance);
+function drawLiveStats(ctx: Ctx, k: number, distance: number, model: OverlayModel, alpha: number) {
+  const v = model.live.at(distance);
   const cells: [string, string][] = [
     ['Distance', formatDistance(v.distance)],
     ['Time', formatDuration(v.elapsed)],
@@ -120,6 +132,7 @@ function drawProfile(
   k: number,
   distance: number,
   p: ElevationProfile,
+  accent: string,
   alpha: number,
 ) {
   const left = 36 * k;
@@ -148,10 +161,12 @@ function drawProfile(
   ctx.beginPath();
   ctx.rect(left, top - 10 * k, cx - left, bottom - top + 20 * k);
   ctx.clip();
-  ctx.fillStyle = 'rgba(249, 115, 22, 0.85)';
+  ctx.globalAlpha = alpha * 0.85;
+  ctx.fillStyle = accent;
   area();
   ctx.fill();
   ctx.restore();
+  ctx.globalAlpha = alpha;
   // Cursor.
   const live = interpolate(p, distance);
   ctx.strokeStyle = '#ffffff';
@@ -160,13 +175,40 @@ function drawProfile(
   ctx.moveTo(cx, bottom);
   ctx.lineTo(cx, y(live));
   ctx.stroke();
-  ctx.fillStyle = ORANGE;
+  ctx.fillStyle = accent;
   ctx.strokeStyle = '#ffffff';
   ctx.lineWidth = 3 * k;
   ctx.beginPath();
   ctx.arc(cx, y(live), 8 * k, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
+}
+
+/** A caption pill (e.g. "Highest point · 1,874 m") while passing a highlight. */
+function drawHighlight(
+  ctx: Ctx,
+  width: number,
+  k: number,
+  d: number,
+  m: OverlayModel,
+  alpha: number,
+) {
+  const h = m.highlights.find((x) => Math.abs(x.distance - d) <= HIGHLIGHT_RANGE_M);
+  if (!h) return;
+  const fade = 1 - Math.abs(h.distance - d) / HIGHLIGHT_RANGE_M;
+  ctx.globalAlpha = alpha * Math.min(1, fade * 3);
+  ctx.font = `700 ${30 * k}px ${FONT}`;
+  const w = ctx.measureText(h.label).width + 44 * k;
+  const x = (width - w) / 2;
+  const y = 36 * k;
+  ctx.fillStyle = m.accent;
+  roundRect(ctx, x, y, w, 60 * k, 30 * k);
+  ctx.fill();
+  ctx.fillStyle = '#ffffff';
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'center';
+  ctx.fillText(h.label, width / 2, y + 31 * k);
+  ctx.textAlign = 'start';
 }
 
 function drawTitle(
@@ -217,7 +259,7 @@ function drawEndCard(
   m.summary.slice(0, 4).forEach(({ label, value }, i) => {
     const x = cx + (i % 2 === 0 ? -colW / 2 : colW / 2);
     const y = cy - 60 * k + Math.floor(i / 2) * 170 * k;
-    ctx.fillStyle = ORANGE;
+    ctx.fillStyle = m.accent;
     ctx.font = `800 ${fitFont(ctx, value, 800, 72 * k, colW * 0.95)}px ${FONT}`;
     ctx.fillText(value, x, y);
     ctx.fillStyle = 'rgba(203, 213, 225, 0.95)';
