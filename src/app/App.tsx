@@ -2,16 +2,29 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { BASEMAPS, DEFAULT_BASEMAP, getBasemap } from '../basemaps/registry';
 import { DEFAULT_TERRAIN } from '../basemaps/terrain';
 import type { Viewport } from '../camera/camera';
+import { exportTimeline } from '../export/timing';
 import { ACCEPTED_EXTENSIONS, ImportError, importActivity, type Track } from '../import';
-import { createTimeline } from '../timeline/timeline';
-import { computeStats } from '../track/stats';
+import type { OverlayModel } from '../render/overlays';
 import type { PhotoPin } from '../render/scene';
+import { createLiveStats, elevationProfile } from '../track/live';
+import { computeStats } from '../track/stats';
+import { ExportPanel } from '../ui/ExportPanel';
 import { FlyoverMap } from '../ui/FlyoverMap';
-import { PhotoOverlay } from '../ui/PhotoOverlay';
+import {
+  formatDate,
+  formatDistance,
+  formatDuration,
+  formatElevation,
+  formatPace,
+  formatSpeed,
+  prefersPace,
+} from '../ui/format';
+import { FrameOverlay } from '../ui/FrameOverlay';
 import { PhotoPanel } from '../ui/PhotoPanel';
 import { PlayerControls } from '../ui/PlayerControls';
 import { StatsPanel } from '../ui/StatsPanel';
 import { useFileDrop } from '../ui/useFileDrop';
+import { aspectRatio, autoLength, useExportSettings } from './exportSettings';
 import { isPhotoFile, usePhotos } from './photos';
 import { usePhotoPlacements } from './placement';
 import { usePlayer } from './player';
@@ -73,13 +86,19 @@ export function App() {
   const stats = useMemo(() => (loaded ? computeStats(loaded.track.points) : null), [loaded]);
   const basemap = getBasemap(basemapId);
   const placements = usePhotoPlacements(loaded?.track ?? null);
-  // The timeline depends on the viewport: overview zoom fits the route to the map's size.
+  const aspect = useExportSettings((s) => s.aspect);
+  const chosenLength = useExportSettings((s) => s.length);
+  const length = chosenLength ?? autoLength(stats?.distance ?? 0, placements.stops.length);
+  // The preview uses the export's timing, so what plays here is what gets exported. The
+  // viewport matters too: the overview zoom fits the route to the map's size.
   const timeline = useMemo(
     () =>
-      loaded && viewport
-        ? createTimeline(loaded.track.points, { viewport, photos: placements.stops })
-        : null,
-    [loaded, viewport, placements.stops],
+      loaded && viewport ? exportTimeline(loaded.track, viewport, length, placements.stops) : null,
+    [loaded, viewport, length, placements.stops],
+  );
+  const model = useMemo(
+    () => (loaded && stats ? overlayModel(loaded, stats) : null),
+    [loaded, stats],
   );
   const pins = useMemo<PhotoPin[]>(
     () =>
@@ -159,6 +178,29 @@ export function App() {
 
         <PhotoPanel placements={placements} timeline={timeline} hasTrack={!!loaded} />
 
+        <ExportPanel
+          base={
+            loaded && model
+              ? {
+                  track: loaded.track,
+                  basemap,
+                  terrain: DEFAULT_TERRAIN,
+                  exaggeration: usePlayer.getState().exaggeration,
+                  stops: placements.stops,
+                  photoBlobs,
+                  pins,
+                  // Burned into the video, as the map and terrain licences require.
+                  model: {
+                    ...model,
+                    attribution: `${basemap.attribution} · ${DEFAULT_TERRAIN.credit}`,
+                  },
+                }
+              : null
+          }
+          length={length}
+          fileName={`${slug(model?.title ?? 'flyover')}-${aspect.replace(':', 'x')}.mp4`}
+        />
+
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-slate-400">Map style</span>
           <select
@@ -180,16 +222,28 @@ export function App() {
       </aside>
 
       <main className="relative flex min-h-[70vh] flex-1 flex-col">
-        <div className="relative flex-1">
-          <FlyoverMap
-            track={loaded?.track ?? null}
-            timeline={timeline}
-            basemap={basemap}
-            terrain={DEFAULT_TERRAIN}
-            pins={pins}
-            onViewportChange={setViewport}
-          />
-          <PhotoOverlay timeline={timeline} blobs={photoBlobs} />
+        {/* The preview takes the export's shape, letterboxed: what you see is what you get. */}
+        <div
+          className="flex flex-1 items-center justify-center bg-black"
+          style={{ containerType: 'size' }}
+        >
+          <div
+            className="relative"
+            style={{
+              width: `min(100cqw, calc(100cqh * ${aspectRatio(aspect)}))`,
+              height: `min(100cqh, calc(100cqw / ${aspectRatio(aspect)}))`,
+            }}
+          >
+            <FlyoverMap
+              track={loaded?.track ?? null}
+              timeline={timeline}
+              basemap={basemap}
+              terrain={DEFAULT_TERRAIN}
+              pins={pins}
+              onViewportChange={setViewport}
+            />
+            <FrameOverlay timeline={timeline} blobs={photoBlobs} model={model} />
+          </div>
         </div>
         {timeline && <PlayerControls timeline={timeline} />}
         {dragging && (
@@ -199,5 +253,40 @@ export function App() {
         )}
       </main>
     </div>
+  );
+}
+
+function overlayModel(loaded: Loaded, stats: ReturnType<typeof computeStats>): OverlayModel {
+  const { track, fileName } = loaded;
+  const pace = prefersPace(track.sport);
+  const sport = track.sport ? track.sport.charAt(0).toUpperCase() + track.sport.slice(1) : null;
+  return {
+    title: track.name ?? fileName.replace(/\.[^.]+$/, ''),
+    subtitle: [formatDate(stats.startTime), sport, formatDistance(stats.distance)]
+      .filter(Boolean)
+      .join(' · '),
+    summary: [
+      { label: 'Distance', value: formatDistance(stats.distance) },
+      { label: 'Elevation gain', value: formatElevation(stats.elevationGain) },
+      { label: 'Moving time', value: formatDuration(stats.movingTime) },
+      pace
+        ? { label: 'Avg pace', value: formatPace(stats.avgSpeed) }
+        : { label: 'Avg speed', value: formatSpeed(stats.avgSpeed) },
+    ],
+    live: createLiveStats(track.points),
+    profile: elevationProfile(track.points),
+    pace,
+    attribution: null,
+  };
+}
+
+function slug(text: string): string {
+  return (
+    text
+      .toLowerCase()
+      .normalize('NFKD')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 60) || 'flyover'
   );
 }

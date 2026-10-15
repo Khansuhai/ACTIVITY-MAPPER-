@@ -173,7 +173,7 @@ export class RouteLayers {
    * Shows a round thumbnail pin where the flyover stops for each photo. Static between edits,
    * so it costs nothing per frame.
    */
-  setPhotos(pins: readonly PhotoPin[]) {
+  setPhotos(pins: readonly PhotoPin[], pixelRatio = globalThis.devicePixelRatio || 1) {
     const map = this.map;
     if (map.getLayer(PINS)) map.removeLayer(PINS);
     if (map.getSource(PINS)) map.removeSource(PINS);
@@ -181,7 +181,7 @@ export class RouteLayers {
     this.pinImages = [];
     if (pins.length === 0) return;
 
-    const ratio = Math.min(3, Math.max(1, globalThis.devicePixelRatio || 1));
+    const ratio = Math.min(4, Math.max(1, pixelRatio));
     for (const pin of pins) {
       const imageId = `photo-pin-${pin.id}`;
       map.addImage(imageId, pinImage(pin.thumb, ratio), { pixelRatio: ratio });
@@ -205,8 +205,8 @@ export class RouteLayers {
         source: PINS,
         layout: {
           'icon-image': ['get', 'icon'],
-          // Smaller when zoomed out, so many photos don't bury the route on the overview.
-          'icon-size': ['interpolate', ['linear'], ['zoom'], 11, 0.45, 14, 1],
+          // Pins are screen-sized icons: keep them modest so they don't hide the route ahead.
+          'icon-size': ['interpolate', ['linear'], ['zoom'], 11, 0.45, 14, 0.7],
           'icon-anchor': 'bottom',
           'icon-allow-overlap': true,
           'icon-ignore-placement': true,

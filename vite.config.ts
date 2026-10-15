@@ -7,6 +7,11 @@ export default defineConfig({
   // Relative base so the static build works on GitHub Pages sub-paths.
   base: './',
   plugins: [react(), tailwindcss()],
+  server: {
+    // Editing docs or regenerating sample photos must not reload the app (it would kill a running
+    // export in the dev server).
+    watch: { ignored: ['**/docs/**', '**/tmp/**', '**/*.md'] },
+  },
   build: {
     // MapLibre alone is ~1 MB minified (~300 kB gzip) and is needed on first paint. The 3.2 MB
     // heic-to chunk (libheif in WebAssembly) loads only for HEIC photos on non-Safari browsers.
