@@ -303,6 +303,77 @@ A 48 MP photo takes about 190 MB once decoded, so decoding 20+ of them at once i
 `drawPhoto()` draws onto any 2D context, so the Phase 4 exporter reuses it. Playback stays at
 about 139 fps through photo stops. Map attribution stays visible above photos.
 
+## Phase 4: Video export (October 2026)
+
+### D25. One CSS layout for every resolution
+
+The export map is laid out at a CSS size with a 720 px short side (1280×720, 720×1280 or 720×720)
+and rendered at `pixelRatio` = output short side / 720. So 4K is the same picture as 1080p, just
+sharper, with the same framing and label sizes. The preview area takes the export's aspect ratio
+(letterboxed), so 9:16 previews as 9:16. Because zoom is chosen from "screen heights per second",
+the preview and the export frame the route the same way even though the preview's CSS size
+differs.
+
+### D26. Deterministic frame loop: render, wait for idle, capture, encode
+
+For each frame N, the exporter does the following, on a hidden second map at the output size:
+
+1. take `timeline.at(N / fps)`
+2. set the camera and route dots
+3. `triggerRepaint()`, then wait for MapLibre's **`idle`** event (all tiles loaded, no
+   transitions, no pending terrain re-renders)
+4. copy the map canvas (`preserveDrawingBuffer: true`) into an `OffscreenCanvas`
+5. draw the photo (awaited, decoded at output resolution) and the overlays
+6. `CanvasSource.add(N / fps, 1 / fps)`, awaiting encoder backpressure
+
+`fadeDuration: 0` and `raster-fade-duration: 0` remove symbol and tile fade-ins, so a frame can
+never catch a half-faded tile. A slow PC takes longer but produces the same video. If tiles never
+arrive (offline), a frame waits at most 30 s, then uses what is rendered and logs a warning.
+
+Limitation, shown in the UI: `idle` needs real rendering, and browsers pause rendering in hidden
+tabs, so the tab must stay visible during export. (`map.redraw()` could render synchronously in
+the background, but MapLibre's terrain cache needs follow-up frames that only rendering
+provides.)
+
+### D27. Encoding: H.264 High with the right level, via Mediabunny
+
+- **Mediabunny 1.61** (MPL-2.0, used unmodified) muxes MP4 and drives WebCodecs.
+- Codec: **H.264 High** first, because every phone plays it. We pass our own
+  `avc1.6400xx` string: Mediabunny picks the level from frame size and bitrate only, labelling
+  1080p60 as level 4.0, which allows only ~30 fps; strict hardware decoders can reject or
+  software-decode that. `avcCodecString()` checks frame size, macroblock rate and bitrate against
+  the H.264 level table (1080p60 → 4.2, 4K60 → 5.2). Fallbacks if H.264 cannot encode that size:
+  HEVC, VP9, AV1.
+- Bitrate ≈ 0.12 bits per pixel per frame (1080p60 ≈ 15 Mbit/s, 4K60 ≈ 60 Mbit/s), variable
+  bitrate, a keyframe every 2 s, `latencyMode: 'quality'`.
+- **Target**: where the File System Access API exists (Chrome, Edge) and the user keeps the box
+  ticked, the MP4 is **streamed straight to the chosen file** (no size limit; index at the end).
+  Elsewhere it is built in memory with the index first (`fastStart: 'in-memory'`), which is limited
+  by RAM for long 4K videos.
+- Mediabunny and the export map load only when Export is clicked (they are not in the initial
+  bundle).
+
+### D28. Overlays drawn by one function for preview and export
+
+`composeFrame()` draws the photo and then `drawOverlays()`:
+
+- live stats: distance, elapsed time, speed or pace over ±75 m, smoothed elevation
+- an elevation profile with the travelled part in orange and a cursor
+- a title card in the intro and an end card with four summary numbers in the final 2.5 s hold
+  (the outro is now 5 s)
+
+Stats and profile fade out while a photo is shown. Everything scales with the frame's short side,
+so 16:9, 9:16 and 1:1 all work. The **attribution** (basemap + terrain) is burned into every
+exported frame; the preview shows MapLibre's attribution control instead. There is no watermark.
+
+### D29. Target length
+
+`planDurations()` fits a 15 s to 3 min target: photos get 1.5 to 4 s each and at most half the
+time, and travel gets the rest (at least 5 s). With very many photos and a short target, the
+video comes out longer than the target rather than flashing photos for a split second. "Auto"
+is the route's natural pace plus 4 s per photo, clamped to 15 s to 3 min. The preview uses
+exactly the same timing.
+
 ### Dependency licenses (Phase 1)
 
 | Package                                    | License      | Use             |

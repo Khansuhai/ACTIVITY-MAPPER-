@@ -17,6 +17,15 @@ Used to decode iPhone HEIC photos in browsers that cannot (Chrome, Edge, Firefox
   The source code is available from the links above and from npm (`npm pack heic-to`).
 - The full licence text is at <https://www.gnu.org/licenses/lgpl-3.0.html>.
 
+## Mediabunny (MPL-2.0)
+
+Used to write MP4 files when exporting a video.
+
+- Package: [mediabunny](https://github.com/Vanilagy/mediabunny) 1.61.x, unmodified, loaded on
+  demand when you export.
+- The MPL-2.0 is a file-level copyleft: its source files stay under the MPL (source on GitHub and
+  npm); OpenFlyover's own code stays MIT. Licence text: <https://mozilla.org/MPL/2.0/>.
+
 ## Map and terrain data
 
 Data sources and their required attributions are listed in the README and shown on the map.
