@@ -136,6 +136,95 @@ lunch stop). It is synthetic on purpose: the repo contains nobody's real locatio
 because we know the true answers (820 m climb, 12-minute stop), it doubles as a realism check
 for the stats. It caught both problems described in D9.
 
+## Phase 2: 3D terrain and flyover preview (October 2026)
+
+### D13. The camera is smoothed over distance, not over frames
+
+`timeline.at(t)` is a pure function of video time. The chase camera's heading and centre are
+precomputed along the route: a heading sampled every few metres from a chord around each point,
+unwrapped (so 359° → 1° is +2°, never −358°), then Gaussian-smoothed with σ ≈ length / 40 (150 to
+1500 m). The camera centre is smoothed the same way with σ / 5, so GPS noise cannot shake the
+picture; the marker itself stays on the raw track.
+
+A frame-by-frame low-pass filter (the usual approach) would make the camera depend on frame rate
+and playback history: scrubbing, 30 vs 60 fps, or a slow export would each give a different
+camera. Here, preview and export are the same function. "No jitter" is tested, not eyeballed:
+on a noisy (±3 m) route with 24 hairpins, bearing changes < 1° per 60 fps frame, turning speed
+changes < 0.05° per frame², and the centre's acceleration stays under 0.5 px per frame².
+
+Other timeline choices:
+
+- **Progress by distance, not recorded time**, so a lunch stop does not freeze the video. Speed
+  ramps up and down over the first and last 8 % (trapezoidal profile, continuous speed).
+- **Zoom from ground speed**: the ground crosses the screen height in ~8 s whatever the route
+  length, so a 10 km hike and a 150 km ride feel alike. Clamped to zoom 10–16.5.
+- **Default length** 20 s + 2 s per km, at most 2 min (Phase 4 adds the 15 s–3 min target).
+- The marker sits 20 % below the screen centre (MapLibre top padding), so the camera shows what
+  is ahead.
+- The overview zoom is computed in pure code (our own Web Mercator `fitBounds`), so the timeline
+  needs no map instance. It depends on the viewport, so export must use the same CSS viewport and
+  scale with `pixelRatio` rather than a bigger CSS size.
+
+### D14. Route progress and marker via feature-state, not per-frame data updates
+
+First version: update `line-gradient` and the marker's GeoJSON every frame. Measured on the
+target laptop GPU (Intel UHD, ANGLE/D3D11): **10 fps**. Investigation:
+
+| Per frame                             | fps |
+| ------------------------------------- | --- |
+| camera only                           | 141 |
+| + `setPaintProperty('line-gradient')` | 12  |
+| + marker `GeoJSONSource.setData`      | 13  |
+| + `setFeatureState` on ~5 dots        | 136 |
+
+With 3D terrain, MapLibre draws lines, fills, rasters and hillshade into cached per-tile textures
+(render-to-texture). A changed layer or source data invalidates those textures, and re-rendering
+all of them costs ~80 ms. Feature-state does not. So:
+
+- the whole route is a **static** faded line (cached once),
+- the travelled part is **dense dots** (~1 px apart at the chase zoom, at most 100 000) on a
+  circle layer, switched on with feature-state as the marker passes,
+- the **marker** is the dot under the current position, shown by feature-state on a second circle
+  layer. It stays inside the map canvas, so the Phase 4 exporter captures it for free.
+
+Result: **130 fps** during real playback (median 7 ms, p95 14 ms). `Frame.lineProgress` and
+the Mercator line-progress mapping were removed as unused.
+
+### D15. Terrain: Mapterhorn by default, 1.0× exaggeration
+
+- **Mapterhorn** (Copernicus GLO-30 globally, national lidar at up to 0.5 m in e.g. Switzerland,
+  every source openly licensed, no key) is sharper than the AWS/Mapzen tiles, which stay in
+  `src/basemaps/terrain.ts` as a fallback. Above z12 Mapterhorn only serves high-resolution
+  regions; elsewhere tiles return 404 and MapLibre overscales the parent. The map ignores those
+  404s instead of logging them.
+- Terrain and hillshade use **two DEM sources** with the same tiles, as MapLibre recommends.
+- Default **exaggeration 1.0**. At 1.5× a slope behind a descending hiker hid the marker (it sits
+  inside the terrain's depth). Users can still raise it to 3×.
+- **Known limitation:** at any exaggeration a high ridge between camera and marker can hide the
+  marker. The fix is a terrain-aware camera that raises pitch when the sight line is blocked. It
+  must sample the DEM itself (decode Terrarium tiles for the route's area), not query the live
+  map, so preview and export stay identical. Planned with the Phase 4 exporter.
+
+### D16. Satellite imagery: EOX Sentinel-2 cloudless **2016 only**
+
+The 2016 edition is CC BY 4.0 (commercial use allowed with attribution). Every later edition
+(2017–2025) is CC BY-NC-SA 4.0, and the attribution host also changed, so they are excluded.
+Esri World Imagery is excluded too: its terms require an ArcGIS account for most uses.
+
+### D17. Playback state in Zustand; the map is driven imperatively
+
+`usePlayer` (Zustand 5, MIT) holds time, playing and exaggeration. The map subscribes outside
+React and calls `applyCamera` + `RouteLayers.update` on every time change, so a 60 fps clock
+does not re-render the React tree. While playing, a transparent overlay blocks map gestures
+(the timeline owns the camera); when paused, the map is freely explorable.
+
+### D18. Phone app (APK) is the final phase
+
+Requested: record an activity on the phone, add full-quality photos and export the video there.
+Plan: after Phase 4, wrap the same web app with Capacitor for Android. Background GPS needs a
+native background-location plugin (a PWA cannot record reliably with the screen off). Building
+the APK needs the Android SDK, which is not installed yet.
+
 ### Dependency licenses (Phase 1)
 
 | Package                                    | License      | Use             |
