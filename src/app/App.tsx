@@ -14,6 +14,7 @@ import { getTheme, type Theme } from '../render/theme';
 import { availableColorings, buildColoring } from '../track/colorize';
 import { findHighlights, type Highlight } from '../track/highlights';
 import { createLiveStats, elevationProfile } from '../track/live';
+import { createSampler } from '../track/sampler';
 import { applyPrivacyZone, inPrivacyZone } from '../track/privacy';
 import { computeStats } from '../track/stats';
 import { ExportPanel } from '../ui/ExportPanel';
@@ -135,20 +136,68 @@ export function App() {
   const aspect = useExportSettings((s) => s.aspect);
   const chosenLength = useExportSettings((s) => s.length);
   const length = chosenLength ?? autoLength(stats?.distance ?? 0, placements.stops.length);
+  // Highlights are found on the whole activity, but never shown inside a privacy zone.
+  const highlights = useMemo(
+    () =>
+      loaded && look.showHighlights
+        ? findHighlights(loaded.track.points).filter(
+            (h) => !inPrivacyZone(privacyZones.zones, privacyZones.radius, h),
+          )
+        : [],
+    [loaded, look.showHighlights, privacyZones],
+  );
+  const pace = prefersPace(loaded?.track.sport ?? null);
+  // Notes the user added along the route; like highlights, never shown inside a privacy zone.
+  const fullSampler = useMemo(() => (loaded ? createSampler(loaded.track.points) : null), [loaded]);
+  const notes = useMemo(
+    () =>
+      fullSampler
+        ? look.moments
+            .map((m) => {
+              const p = fullSampler.at(m.distance);
+              return { distance: m.distance, lat: p.lat, lon: p.lon, label: m.text };
+            })
+            .filter((n) => !inPrivacyZone(privacyZones.zones, privacyZones.radius, n))
+        : [],
+    [fullSampler, look.moments, privacyZones],
+  );
+  // Captions shown while passing (full-activity distances), for the overlays and the camera.
+  const marks = useMemo(
+    () => [
+      ...highlights.map((h) => ({ ...h, label: highlightLabel(h, pace) })),
+      ...notes.map((n) => ({ ...n, kind: 'note' as const })),
+    ],
+    [highlights, notes, pace],
+  );
+  const hiddenStart = privacy?.hiddenStartM ?? 0;
+  // The cinematic camera swings around each mark (distances along the shown route).
+  const swingAt = useMemo(() => marks.map((m) => m.distance - hiddenStart), [marks, hiddenStart]);
+
   // The preview uses the export's timing, so what plays here is what gets exported. The
   // viewport matters too: the overview zoom fits the route to the map's size.
   const timeline = useMemo(
     () =>
       shown && viewport
-        ? exportTimeline(
-            shown,
-            viewport,
+        ? exportTimeline(shown, viewport, {
             length,
-            placements.stops,
-            elevationAt ? { elevationAt, exaggeration } : undefined,
-          )
+            stops: placements.stops,
+            photoSeconds: look.photoSeconds,
+            cameraStyle: look.cameraStyle,
+            highlights: swingAt,
+            terrain: elevationAt ? { elevationAt, exaggeration } : undefined,
+          })
         : null,
-    [shown, viewport, length, placements.stops, elevationAt, exaggeration],
+    [
+      shown,
+      viewport,
+      length,
+      placements.stops,
+      look.photoSeconds,
+      look.cameraStyle,
+      swingAt,
+      elevationAt,
+      exaggeration,
+    ],
   );
 
   const colorings = useMemo(
@@ -181,36 +230,20 @@ export function App() {
     [theme.route, coloring, marker],
   );
 
-  // Highlights are found on the whole activity, but never shown inside a privacy zone.
-  const highlights = useMemo(
-    () =>
-      loaded && look.showHighlights
-        ? findHighlights(loaded.track.points).filter(
-            (h) => !inPrivacyZone(privacyZones.zones, privacyZones.radius, h),
-          )
-        : [],
-    [loaded, look.showHighlights, privacyZones],
-  );
-  const pace = prefersPace(loaded?.track.sport ?? null);
   const labels = useMemo<MapLabels>(
     () => ({
       peaks: look.showPeaks,
       lightText: basemap.lightText,
       color: theme.route,
-      highlights: highlights.map((h) => ({
-        ...h,
-        label: highlightLabel(h, pace).replace(' · ', '\n'),
-      })),
+      highlights: marks.map((m) => ({ ...m, label: m.label.replace(' · ', '\n') })),
     }),
-    [look.showPeaks, basemap.lightText, theme.route, highlights, pace],
+    [look.showPeaks, basemap.lightText, theme.route, marks],
   );
 
   const model = useMemo(
     () =>
-      loaded && stats
-        ? overlayModel(loaded, stats, theme, privacy?.hiddenStartM ?? 0, highlights)
-        : null,
-    [loaded, stats, theme, privacy, highlights],
+      loaded && stats ? overlayModel(loaded, stats, theme, hiddenStart, marks, look.title) : null,
+    [loaded, stats, theme, hiddenStart, marks, look.title],
   );
   useMusicSync(look.music?.url ?? null, timeline?.duration ?? 0, look.musicVolume);
   const pins = useMemo<PhotoPin[]>(
@@ -297,6 +330,10 @@ export function App() {
             legend={coloring?.legend ?? null}
             autoIcon={autoIcon}
             privacyNote={privacyNote}
+            defaultTitle={model?.title ?? ''}
+            currentDistance={() =>
+              timeline ? timeline.at(usePlayer.getState().time).distance + hiddenStart : null
+            }
           />
         )}
 
@@ -310,6 +347,9 @@ export function App() {
                   exaggeration,
                   elevation: elevationAt,
                   stops: placements.stops,
+                  photoSeconds: look.photoSeconds,
+                  cameraStyle: look.cameraStyle,
+                  highlights: swingAt,
                   photoBlobs,
                   pins,
                   look: routeLook,
@@ -390,13 +430,14 @@ function overlayModel(
   stats: ReturnType<typeof computeStats>,
   theme: Theme,
   distanceOffset: number,
-  highlights: Highlight[],
+  marks: { distance: number; label: string }[],
+  title: string | null,
 ): OverlayModel {
   const { track, fileName } = loaded;
   const pace = prefersPace(track.sport);
   const sport = track.sport ? track.sport.charAt(0).toUpperCase() + track.sport.slice(1) : null;
   return {
-    title: track.name ?? fileName.replace(/\.[^.]+$/, ''),
+    title: title?.trim() || track.name || fileName.replace(/\.[^.]+$/, ''),
     subtitle: [formatDate(stats.startTime), sport, formatDistance(stats.distance)]
       .filter(Boolean)
       .join(' · '),
@@ -413,7 +454,7 @@ function overlayModel(
     pace,
     accent: theme.accent,
     distanceOffset,
-    highlights: highlights.map((h) => ({ distance: h.distance, label: highlightLabel(h, pace) })),
+    highlights: marks.map((m) => ({ distance: m.distance, label: m.label })),
     attribution: null,
   };
 }

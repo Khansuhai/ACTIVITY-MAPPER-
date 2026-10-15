@@ -25,7 +25,12 @@ export interface MapLabels {
   peaks: boolean;
   /** White text with a dark halo (for satellite and dark maps). */
   lightText: boolean;
-  highlights: { lat: number; lon: number; label: string; kind: 'highest' | 'fastest-km' }[];
+  highlights: {
+    lat: number;
+    lon: number;
+    label: string;
+    kind: 'highest' | 'fastest-km' | 'note';
+  }[];
   color: string;
 }
 
@@ -300,6 +305,7 @@ export class RouteLayers {
       ['label-pass', drawPassIcon],
       ['label-highest', (c, d) => drawStar(c, d, labels.color)],
       ['label-fastest', (c, d) => drawBolt(c, d, labels.color)],
+      ['label-note', (c, d) => drawNote(c, d, labels.color)],
     ];
     for (const [id, draw] of icons) {
       if (map.hasImage(id)) map.removeImage(id);
@@ -372,7 +378,12 @@ export class RouteLayers {
           type: 'Feature',
           properties: {
             label: h.label,
-            icon: h.kind === 'highest' ? 'label-highest' : 'label-fastest',
+            icon:
+              h.kind === 'highest'
+                ? 'label-highest'
+                : h.kind === 'note'
+                  ? 'label-note'
+                  : 'label-fastest',
           },
           geometry: { type: 'Point', coordinates: [h.lon, h.lat] },
         })),
@@ -487,6 +498,20 @@ function drawBolt(ctx: Ctx2D, d: number, color: string) {
   ];
   pts.forEach(([x, y], i) => (i ? ctx.lineTo(x * d, y * d) : ctx.moveTo(x * d, y * d)));
   ctx.closePath();
+  ctx.stroke();
+  ctx.fill();
+}
+
+/** A speech bubble for notes. */
+function drawNote(ctx: Ctx2D, d: number, color: string) {
+  ctx.fillStyle = color;
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = d / 10;
+  ctx.beginPath();
+  ctx.roundRect(d * 0.1, d * 0.12, d * 0.8, d * 0.58, d * 0.16);
+  ctx.moveTo(d * 0.32, d * 0.7);
+  ctx.lineTo(d * 0.26, d * 0.92);
+  ctx.lineTo(d * 0.5, d * 0.7);
   ctx.stroke();
   ctx.fill();
 }

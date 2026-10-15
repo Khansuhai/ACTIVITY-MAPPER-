@@ -13,6 +13,7 @@ import {
 import { renderSoundtrack } from '../audio/mix';
 import type { Basemap } from '../basemaps/registry';
 import type { ElevationFn } from '../camera/clearance';
+import type { CameraStyle } from '../camera/styles';
 import type { TerrainSource } from '../basemaps/terrain';
 import type { Track } from '../import';
 import { PhotoCache } from '../photos/cache';
@@ -53,6 +54,10 @@ export interface ExportOptions {
   /** Target length in seconds (see planDurations). */
   length: number;
   stops: readonly PhotoStop[];
+  photoSeconds: number | null;
+  cameraStyle: CameraStyle;
+  /** Distances (m, along the shown route) the cinematic camera swings around. */
+  highlights: readonly number[];
   photoBlobs: ReadonlyMap<string, Blob>;
   pins: readonly PhotoPin[];
   look: RouteLook;
@@ -100,13 +105,14 @@ export async function exportVideo(
   const elevation =
     options.elevation ??
     (await loadElevation(bbox(options.track.points), options.terrain, signal).catch(() => null));
-  const timeline = exportTimeline(
-    options.track,
-    css,
-    options.length,
-    options.stops,
-    elevation ? { elevationAt: elevation, exaggeration: options.exaggeration } : undefined,
-  );
+  const timeline = exportTimeline(options.track, css, {
+    length: options.length,
+    stops: options.stops,
+    photoSeconds: options.photoSeconds,
+    cameraStyle: options.cameraStyle,
+    highlights: options.highlights,
+    terrain: elevation ? { elevationAt: elevation, exaggeration: options.exaggeration } : undefined,
+  });
   const fps = options.fps;
   const totalFrames = Math.round(timeline.duration * fps);
   const bitrate = chooseBitrate(width, height, fps);

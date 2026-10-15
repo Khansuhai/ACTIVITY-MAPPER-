@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { useLook } from '../app/look';
+import { CAMERA_STYLE_NAMES, CAMERA_STYLES, type CameraStyle } from '../camera/styles';
 import { ICON_IDS, ICON_NAMES, type IconId } from '../render/icons';
 import { THEMES } from '../render/theme';
 import { PRIVACY_RADII } from '../track/privacy';
@@ -13,6 +14,10 @@ interface StylePanelProps {
   autoIcon: IconId | null;
   /** Warning when the privacy zone could not be applied. */
   privacyNote: string | null;
+  /** Default title (the activity's name), shown as the placeholder. */
+  defaultTitle: string;
+  /** Metres along the whole activity at the player's current position, or null. */
+  currentDistance(): number | null;
 }
 
 const COLOR_BY_NAMES: Record<ColorBy, string> = {
@@ -23,7 +28,16 @@ const COLOR_BY_NAMES: Record<ColorBy, string> = {
 };
 
 /** Theme, route colouring, marker icon, privacy zone, labels and music. */
-export function StylePanel({ colorings, legend, autoIcon, privacyNote }: StylePanelProps) {
+const PHOTO_TIMES = [null, 2, 3, 4, 6] as const;
+
+export function StylePanel({
+  colorings,
+  legend,
+  autoIcon,
+  privacyNote,
+  defaultTitle,
+  currentDistance,
+}: StylePanelProps) {
   const look = useLook();
   const iconInput = useRef<HTMLInputElement>(null);
   const musicInput = useRef<HTMLInputElement>(null);
@@ -37,6 +51,51 @@ export function StylePanel({ colorings, legend, autoIcon, privacyNote }: StylePa
       <h2 id="style-title" className="font-semibold text-white">
         Style
       </h2>
+
+      <label className={label}>
+        Video title
+        <input
+          type="text"
+          value={look.title ?? ''}
+          placeholder={defaultTitle}
+          maxLength={80}
+          onChange={(e) => look.set({ title: e.target.value || null })}
+          className={select}
+        />
+      </label>
+
+      <div className="grid grid-cols-2 gap-2">
+        <label className={label}>
+          Camera
+          <select
+            className={select}
+            value={look.cameraStyle}
+            onChange={(e) => look.set({ cameraStyle: e.target.value as CameraStyle })}
+          >
+            {CAMERA_STYLES.map((c) => (
+              <option key={c} value={c}>
+                {CAMERA_STYLE_NAMES[c]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className={label}>
+          Photo time
+          <select
+            className={select}
+            value={look.photoSeconds ?? 'auto'}
+            onChange={(e) =>
+              look.set({ photoSeconds: e.target.value === 'auto' ? null : Number(e.target.value) })
+            }
+          >
+            {PHOTO_TIMES.map((t) => (
+              <option key={t ?? 'auto'} value={t ?? 'auto'}>
+                {t === null ? 'Auto' : `${t} s each`}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
 
       <fieldset className="flex items-center gap-2">
         <legend className="sr-only">Colour theme</legend>
@@ -158,6 +217,49 @@ export function StylePanel({ colorings, legend, autoIcon, privacyNote }: StylePa
         </fieldset>
       </div>
       {privacyNote && <p className="text-xs text-amber-300">{privacyNote}</p>}
+
+      <div className="space-y-1 text-sm">
+        <div className="flex items-center gap-2">
+          <span className="text-slate-400">Notes</span>
+          <span className="min-w-0 flex-1 text-xs text-slate-400">
+            Shown when the flyover passes. Emoji welcome.
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              const d = currentDistance();
+              if (d === null) return;
+              const text = window.prompt(
+                'Note at this point of the route (e.g. "Lunch break 🍕"):',
+              );
+              if (text?.trim()) look.addMoment(d, text.trim().slice(0, 60));
+            }}
+            className="rounded-md border border-slate-700 px-2 py-1 text-slate-200 hover:bg-slate-800"
+          >
+            Add note here
+          </button>
+        </div>
+        {look.moments.length > 0 && (
+          <ul className="space-y-1">
+            {look.moments.map((m) => (
+              <li key={m.id} className="flex items-center gap-2 text-slate-200">
+                <span className="w-16 shrink-0 text-xs text-slate-400 tabular-nums">
+                  {(m.distance / 1000).toFixed(2)} km
+                </span>
+                <span className="min-w-0 flex-1 truncate">{m.text}</span>
+                <button
+                  type="button"
+                  onClick={() => look.removeMoment(m.id)}
+                  aria-label={`Remove note ${m.text}`}
+                  className="rounded-md px-2 text-slate-400 hover:bg-slate-800"
+                >
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
       <div className="space-y-1 text-sm">
         <div className="flex items-center gap-2">
