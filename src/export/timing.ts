@@ -1,3 +1,4 @@
+import type { ElevationFn } from '../camera/clearance';
 import type { Track } from '../import';
 import { createTimeline, type PhotoStop, type Timeline } from '../timeline/timeline';
 import { planDurations } from './plan';
@@ -15,6 +16,7 @@ export function exportTimeline(
   viewport: { width: number; height: number },
   length: number,
   stops: readonly PhotoStop[],
+  terrain?: { elevationAt: ElevationFn; exaggeration: number },
 ): Timeline {
   const { travelDuration, photoDuration } = planDurations(
     length,
@@ -29,6 +31,7 @@ export function exportTimeline(
     photoDuration,
     introDuration: INTRO_SECONDS,
     outroDuration: OUTRO_SECONDS,
+    terrain,
   });
 }
 

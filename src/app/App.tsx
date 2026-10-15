@@ -1,8 +1,11 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BASEMAPS, DEFAULT_BASEMAP, getBasemap } from '../basemaps/registry';
 import { DEFAULT_TERRAIN } from '../basemaps/terrain';
 import type { Viewport } from '../camera/camera';
+import type { ElevationFn } from '../camera/clearance';
 import { exportTimeline } from '../export/timing';
+import { loadElevation } from '../terrain/dem';
+import { bbox } from '../track/geo';
 import { ACCEPTED_EXTENSIONS, ImportError, importActivity, type Track } from '../import';
 import { iconForSport, type MarkerChoice } from '../render/icons';
 import type { OverlayModel } from '../render/overlays';
@@ -116,14 +119,36 @@ export function App() {
       : null;
 
   const placements = usePhotoPlacements(shown, privacyZones);
+
+  // Terrain heights for the ridge-aware camera, loaded once per route.
+  const [elevation, setElevation] = useState<{ track: Track; at: ElevationFn } | null>(null);
+  useEffect(() => {
+    if (!loaded) return;
+    const controller = new AbortController();
+    loadElevation(bbox(loaded.track.points), DEFAULT_TERRAIN, controller.signal)
+      .then((at) => setElevation({ track: loaded.track, at }))
+      .catch(() => undefined); // offline: the camera simply keeps its usual pitch
+    return () => controller.abort();
+  }, [loaded]);
+  const elevationAt = elevation && elevation.track === loaded?.track ? elevation.at : null;
+  const exaggeration = usePlayer((s) => s.exaggeration);
   const aspect = useExportSettings((s) => s.aspect);
   const chosenLength = useExportSettings((s) => s.length);
   const length = chosenLength ?? autoLength(stats?.distance ?? 0, placements.stops.length);
   // The preview uses the export's timing, so what plays here is what gets exported. The
   // viewport matters too: the overview zoom fits the route to the map's size.
   const timeline = useMemo(
-    () => (shown && viewport ? exportTimeline(shown, viewport, length, placements.stops) : null),
-    [shown, viewport, length, placements.stops],
+    () =>
+      shown && viewport
+        ? exportTimeline(
+            shown,
+            viewport,
+            length,
+            placements.stops,
+            elevationAt ? { elevationAt, exaggeration } : undefined,
+          )
+        : null,
+    [shown, viewport, length, placements.stops, elevationAt, exaggeration],
   );
 
   const colorings = useMemo(
@@ -282,7 +307,8 @@ export function App() {
                   track: shown,
                   basemap,
                   terrain: DEFAULT_TERRAIN,
-                  exaggeration: usePlayer.getState().exaggeration,
+                  exaggeration,
+                  elevation: elevationAt,
                   stops: placements.stops,
                   photoBlobs,
                   pins,

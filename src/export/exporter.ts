@@ -12,6 +12,7 @@ import {
 } from 'mediabunny';
 import { renderSoundtrack } from '../audio/mix';
 import type { Basemap } from '../basemaps/registry';
+import type { ElevationFn } from '../camera/clearance';
 import type { TerrainSource } from '../basemaps/terrain';
 import type { Track } from '../import';
 import { PhotoCache } from '../photos/cache';
@@ -37,6 +38,8 @@ import {
   type Resolution,
   videoSize,
 } from './plan';
+import { loadElevation } from '../terrain/dem';
+import { bbox } from '../track/geo';
 import { exportSupportProblem, exportTimeline } from './timing';
 
 export interface ExportOptions {
@@ -58,6 +61,8 @@ export interface ExportOptions {
   /** Music to mix in (looped, faded), or null for a silent video. */
   music: AudioBuffer | null;
   musicVolume: number;
+  /** Terrain heights for the ridge-aware camera; loaded here if not ready yet. */
+  elevation: ElevationFn | null;
   /** Stream into this file (File System Access API), or null to build the video in memory. */
   file: FileSystemFileHandle | null;
 }
@@ -91,7 +96,17 @@ export async function exportVideo(
 
   const { width, height } = videoSize(options.aspect, options.resolution);
   const { css, pixelRatio } = exportViewport(width, height);
-  const timeline = exportTimeline(options.track, css, options.length, options.stops);
+  // The same terrain heights as the preview, so the camera tilts exactly as previewed.
+  const elevation =
+    options.elevation ??
+    (await loadElevation(bbox(options.track.points), options.terrain, signal).catch(() => null));
+  const timeline = exportTimeline(
+    options.track,
+    css,
+    options.length,
+    options.stops,
+    elevation ? { elevationAt: elevation, exaggeration: options.exaggeration } : undefined,
+  );
   const fps = options.fps;
   const totalFrames = Math.round(timeline.duration * fps);
   const bitrate = chooseBitrate(width, height, fps);
