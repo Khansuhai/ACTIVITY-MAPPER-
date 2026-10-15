@@ -1,0 +1,53 @@
+name: Android APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    name: Build debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - uses: pnpm/action-setup@v6
+        with:
+          cache: true
+
+      # Capacitor 8 builds with JDK 21 (Gradle 8.14 cannot run on newer JDKs).
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm exec cap sync android
+
+      # The runner image ships the Android SDK; Gradle fetches any missing platform.
+      - name: Assemble
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: openflyover-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
