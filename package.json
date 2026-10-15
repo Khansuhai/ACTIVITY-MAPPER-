@@ -26,7 +26,8 @@
     "fit-file-parser": "^6.2.2",
     "maplibre-gl": "^6.14.0",
     "react": "^19.3.0",
-    "react-dom": "^19.3.0"
+    "react-dom": "^19.3.0",
+    "zustand": "^5.0.15"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

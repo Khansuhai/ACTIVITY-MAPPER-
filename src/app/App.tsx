@@ -1,10 +1,15 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { BASEMAPS, DEFAULT_BASEMAP, getBasemap } from '../basemaps/registry';
+import { DEFAULT_TERRAIN } from '../basemaps/terrain';
+import type { Viewport } from '../camera/camera';
 import { ACCEPTED_EXTENSIONS, ImportError, importActivity, type Track } from '../import';
+import { createTimeline } from '../timeline/timeline';
 import { computeStats } from '../track/stats';
-import { RouteMap } from '../ui/RouteMap';
+import { FlyoverMap } from '../ui/FlyoverMap';
+import { PlayerControls } from '../ui/PlayerControls';
 import { StatsPanel } from '../ui/StatsPanel';
 import { useFileDrop } from '../ui/useFileDrop';
+import { usePlayer } from './player';
 
 const SAMPLE_URL = './samples/sample-hike.gpx';
 
@@ -18,6 +23,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [basemapId, setBasemapId] = useState<string>(DEFAULT_BASEMAP.id);
+  const [viewport, setViewport] = useState<Viewport | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async (fileName: string, read: () => Promise<ArrayBuffer>) => {
@@ -25,6 +31,7 @@ export function App() {
     setError(null);
     try {
       const track = await importActivity(await read(), fileName);
+      usePlayer.getState().reset();
       setLoaded({ track, fileName });
     } catch (e) {
       console.error(e);
@@ -50,6 +57,11 @@ export function App() {
   const dragging = useFileDrop(loadFile);
   const stats = useMemo(() => (loaded ? computeStats(loaded.track.points) : null), [loaded]);
   const basemap = getBasemap(basemapId);
+  // The timeline depends on the viewport: overview zoom fits the route to the map's size.
+  const timeline = useMemo(
+    () => (loaded && viewport ? createTimeline(loaded.track.points, { viewport }) : null),
+    [loaded, viewport],
+  );
 
   return (
     <div className="flex h-full flex-col md:flex-row">
@@ -130,8 +142,17 @@ export function App() {
         </p>
       </aside>
 
-      <main className="relative min-h-[60vh] flex-1">
-        <RouteMap track={loaded?.track ?? null} basemap={basemap} />
+      <main className="relative flex min-h-[70vh] flex-1 flex-col">
+        <div className="relative flex-1">
+          <FlyoverMap
+            track={loaded?.track ?? null}
+            timeline={timeline}
+            basemap={basemap}
+            terrain={DEFAULT_TERRAIN}
+            onViewportChange={setViewport}
+          />
+        </div>
+        {timeline && <PlayerControls timeline={timeline} />}
         {dragging && (
           <div className="pointer-events-none fixed inset-0 z-10 flex items-center justify-center border-4 border-dashed border-orange-400 bg-slate-950/70">
             <p className="text-2xl font-semibold text-white">Drop to load your activity</p>
