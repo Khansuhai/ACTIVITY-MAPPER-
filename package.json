@@ -20,10 +20,13 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "fixtures:fit": "node scripts/make-fit-fixture.ts",
-    "sample:gpx": "node scripts/make-sample-gpx.ts"
+    "sample:gpx": "node scripts/make-sample-gpx.ts",
+    "sample:photos": "uv run --no-project --with pillow --with piexif --with pillow-heif python scripts/make-photos.py"
   },
   "dependencies": {
+    "exifr": "^7.1.3",
     "fit-file-parser": "^6.2.2",
+    "heic-to": "^1.6.6",
     "maplibre-gl": "^6.14.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
