@@ -1,4 +1,5 @@
 import type { ElevationFn } from '../camera/clearance';
+import type { CameraStyle } from '../camera/styles';
 import type { Track } from '../import';
 import { createTimeline, type PhotoStop, type Timeline } from '../timeline/timeline';
 import { planDurations } from './plan';
@@ -10,28 +11,42 @@ import { planDurations } from './plan';
 export const INTRO_SECONDS = 4;
 export const OUTRO_SECONDS = 5;
 
-/** Builds the timeline for given settings; shared with the preview so both have the same timing. */
+/** Everything that decides what the flyover looks like over time. */
+export interface FlyoverSettings {
+  /** Target video length in seconds. */
+  length: number;
+  stops: readonly PhotoStop[];
+  /** Seconds each photo is shown, or null to fit them into the length automatically. */
+  photoSeconds: number | null;
+  cameraStyle: CameraStyle;
+  /** Distances (m, along the shown route) the cinematic camera swings around. */
+  highlights: readonly number[];
+  terrain?: { elevationAt: ElevationFn; exaggeration: number };
+}
+
+/** Builds the timeline; the preview and the exporter both call this, so they always match. */
 export function exportTimeline(
   track: Track,
   viewport: { width: number; height: number },
-  length: number,
-  stops: readonly PhotoStop[],
-  terrain?: { elevationAt: ElevationFn; exaggeration: number },
+  settings: FlyoverSettings,
 ): Timeline {
   const { travelDuration, photoDuration } = planDurations(
-    length,
-    stops.length,
+    settings.length,
+    settings.stops.length,
     INTRO_SECONDS,
     OUTRO_SECONDS,
+    settings.photoSeconds,
   );
   return createTimeline(track.points, {
     viewport,
     travelDuration,
-    photos: stops,
+    photos: settings.stops,
     photoDuration,
     introDuration: INTRO_SECONDS,
     outroDuration: OUTRO_SECONDS,
-    terrain,
+    terrain: settings.terrain,
+    cameraStyle: settings.cameraStyle,
+    highlights: settings.highlights,
   });
 }
 

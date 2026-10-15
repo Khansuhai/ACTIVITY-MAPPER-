@@ -88,18 +88,20 @@ export function avcCodecString(
 
 /**
  * Fits the video into a target length by choosing how long the travel and each photo stop take.
- * Photos get 1.5 to 4 s each and at most half of the time; travel gets the rest, at least 5 s.
- * The result can exceed the target when there are very many photos.
+ * Photos get 1.5 to 4 s each and at most half of the time (or exactly `photoSeconds` if the user
+ * chose a display time); travel gets the rest, at least 5 s. The result can exceed the target
+ * when there are very many photos.
  */
 export function planDurations(
   targetSeconds: number,
   photoCount: number,
   intro: number,
   outro: number,
+  photoSeconds: number | null = null,
 ): { travelDuration: number; photoDuration: number } {
   const available = Math.max(0, targetSeconds - intro - outro);
   if (photoCount === 0) return { travelDuration: Math.max(5, available), photoDuration: 0 };
-  const photoDuration = Math.min(4, Math.max(1.5, (available * 0.5) / photoCount));
+  const photoDuration = photoSeconds ?? Math.min(4, Math.max(1.5, (available * 0.5) / photoCount));
   const travelDuration = Math.max(5, available - photoCount * photoDuration);
   return { travelDuration, photoDuration };
 }

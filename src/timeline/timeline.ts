@@ -8,6 +8,7 @@ import {
 } from '../camera/camera';
 import { type ElevationFn, pitchProfile } from '../camera/clearance';
 import { createSmoothCamera, defaultSmoothOptions, type SmoothOptions } from '../camera/smooth';
+import { type CameraStyle, styleCamera } from '../camera/styles';
 import type { TrackPoint } from '../import/types';
 import { bbox } from '../track/geo';
 import { createSampler, type SampledPosition } from '../track/sampler';
@@ -67,6 +68,10 @@ export interface TimelineOptions {
   smoothing?: SmoothOptions;
   /** Terrain heights: when given, the camera tilts down where a ridge would hide the marker. */
   terrain?: { elevationAt: ElevationFn; exaggeration: number };
+  /** Camera style (see camera/styles.ts). Default: chase. */
+  cameraStyle?: CameraStyle;
+  /** Distances (m) the cinematic camera swings around. */
+  highlights?: readonly number[];
 }
 
 export const INTRO_HOLD = 1; // seconds of still overview before the camera moves
@@ -139,14 +144,18 @@ export function createTimeline(points: readonly TrackPoint[], options: TimelineO
     offsetY: 0,
   };
 
+  const style = options.cameraStyle ?? 'chase';
+  const styleContext = { length, highlights: options.highlights ?? [] };
+
   function chase(distance: number): CameraState {
-    return {
+    const camera: CameraState = {
       center: smooth.center(distance),
       zoom: chaseZoom,
       pitch: pitchAt(distance),
       bearing: smooth.heading(distance),
       offsetY: CHASE_OFFSET_Y,
     };
+    return styleCamera(style, camera, distance, styleContext);
   }
 
   function frame(
