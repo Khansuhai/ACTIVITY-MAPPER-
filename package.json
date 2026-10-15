@@ -18,7 +18,8 @@
     "typecheck": "tsc -b",
     "test": "vitest run",
     "test:watch": "vitest",
-    "fixtures:fit": "node scripts/make-fit-fixture.ts"
+    "fixtures:fit": "node scripts/make-fit-fixture.ts",
+    "sample:gpx": "node scripts/make-sample-gpx.ts"
   },
   "dependencies": {
     "fit-file-parser": "^6.2.2",

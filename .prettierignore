@@ -3,3 +3,4 @@ coverage
 pnpm-lock.yaml
 PROMPT.md
 tests/fixtures
+public/samples
