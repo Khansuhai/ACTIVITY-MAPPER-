@@ -80,3 +80,31 @@ describe('seedFromId', () => {
     expect(new Set(seeds).size).toBe(6);
   });
 });
+
+describe('overlayOpacity', async () => {
+  const { overlayOpacity } = await import('../src/render/overlays');
+  const { createTimeline } = await import('../src/timeline/timeline');
+  const { straight } = await import('./routes');
+  const timeline = createTimeline(straight(0, 3000), {
+    viewport: { width: 1280, height: 720 },
+    travelDuration: 20,
+    photos: [{ id: 'p', distance: 1500 }],
+  });
+  const at = (t: number, photo = 0) => overlayOpacity(timeline.at(t), timeline, photo);
+
+  it('shows the title card at the start, then hides it', () => {
+    expect(at(0).title).toBe(1);
+    expect(at(3.5).title).toBe(0);
+  });
+
+  it('shows stats during travel but not on a photo or at the end', () => {
+    expect(at(timeline.introDuration + 2).hud).toBe(1);
+    expect(at(timeline.introDuration + 2, 1).hud).toBe(0);
+    expect(at(timeline.duration).hud).toBe(0);
+  });
+
+  it('shows the end card only during the final hold', () => {
+    expect(at(timeline.introDuration + 5).end).toBe(0);
+    expect(at(timeline.duration).end).toBe(1);
+  });
+});

@@ -1,33 +1,36 @@
 import { useEffect, useRef } from 'react';
 import { usePlayer } from '../app/player';
 import { PhotoCache } from '../photos/cache';
-import { drawPhoto } from '../render/drawPhoto';
-import { photoLayout, seedFromId } from '../render/photoLayout';
+import { composeFrame, photoDecodeSize } from '../render/compose';
+import type { OverlayModel } from '../render/overlays';
 import type { Timeline } from '../timeline/timeline';
 
-interface PhotoOverlayProps {
+interface FrameOverlayProps {
   timeline: Timeline | null;
   /** Decodable blob for each photo id. */
   blobs: ReadonlyMap<string, Blob>;
+  model: OverlayModel | null;
 }
 
 /** Start decoding a photo this many seconds before its stop. */
 const PRELOAD_SECONDS = 3;
-/** Headroom for the slow zoom and overscan, so the photo is never upscaled on screen. */
-const ZOOM_HEADROOM = 1.12;
-
 /**
- * A 2D canvas over the map that shows the photo at each stop. Drawn from the timeline frame, like
- * the map, so it matches the exported video. Pointer events pass through to the map.
+ * A 2D canvas over the map with the photo at each stop and the overlays (stats, profile, title
+ * and end cards). Drawn with the same composeFrame() as the exporter, so preview and video
+ * match. Pointer events pass through to the map.
  */
-export function PhotoOverlay({ timeline, blobs }: PhotoOverlayProps) {
+export function FrameOverlay({ timeline, blobs, model }: FrameOverlayProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const blobsRef = useRef(blobs);
+  const modelRef = useRef(model);
   const cacheRef = useRef<PhotoCache | null>(null);
 
   useEffect(() => {
     blobsRef.current = blobs;
-  }, [blobs]);
+    modelRef.current = model;
+    // Redraw so overlay text (e.g. a renamed activity) updates while paused.
+    canvasRef.current?.dispatchEvent(new Event('redraw'));
+  }, [blobs, model]);
 
   useEffect(() => {
     const cache = new PhotoCache((id) => blobsRef.current.get(id) ?? null);
@@ -45,31 +48,21 @@ export function PhotoOverlay({ timeline, blobs }: PhotoOverlayProps) {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       if (!timeline || !cache) return;
       // Decode at the canvas's real pixel size (CSS size x devicePixelRatio), plus headroom.
-      const minLongSide = Math.max(canvas.width, canvas.height) * ZOOM_HEADROOM;
+      const minLongSide = photoDecodeSize(canvas.width, canvas.height);
 
       const upcoming = timeline.at(time + PRELOAD_SECONDS).photo;
       if (upcoming) void cache.load(upcoming.id, minLongSide)?.catch(() => undefined);
 
-      const photo = timeline.at(time).photo;
-      if (!photo) return;
-      const decoded = cache.peek(photo.id, minLongSide);
-      if (!decoded) {
-        // Not decoded yet: draw as soon as it is, if we are still on this photo.
+      const frame = timeline.at(time);
+      const decoded = frame.photo ? cache.peek(frame.photo.id, minLongSide) : null;
+      if (frame.photo && !decoded) {
+        // Not decoded yet: redraw as soon as it is, if we are still on this photo.
         void cache
-          .load(photo.id, minLongSide)
+          .load(frame.photo.id, minLongSide)
           ?.then(() => draw(usePlayer.getState().time))
           .catch(() => undefined);
-        return;
       }
-      const layout = photoLayout(
-        decoded.bitmap.width,
-        decoded.bitmap.height,
-        canvas.width,
-        canvas.height,
-        photo.progress,
-        seedFromId(photo.id),
-      );
-      drawPhoto(ctx, decoded, layout);
+      composeFrame(ctx, canvas.width, canvas.height, frame, timeline, modelRef.current, decoded);
     };
 
     const resize = () => {
@@ -85,9 +78,12 @@ export function PhotoOverlay({ timeline, blobs }: PhotoOverlayProps) {
     const unsubscribe = usePlayer.subscribe((s, prev) => {
       if (s.time !== prev.time) draw(s.time);
     });
+    const redraw = () => draw(usePlayer.getState().time);
+    canvas.addEventListener('redraw', redraw);
     return () => {
       observer.disconnect();
       unsubscribe();
+      canvas.removeEventListener('redraw', redraw);
     };
   }, [timeline]);
 

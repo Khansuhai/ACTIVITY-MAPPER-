@@ -47,7 +47,7 @@ export function photoLayout(
   seed = 0.5,
 ): PhotoLayout {
   const u = Math.min(1, Math.max(0, progress));
-  const opacity = smoothstep(Math.min(u / FADE, (1 - u) / FADE, 1));
+  const opacity = photoOpacity(u);
   const zoom = 1 + ZOOM * easeInOutSine(u);
   // Pan a little, left-to-right or right-to-left depending on the seed.
   const dir = seed < 0.5 ? -1 : 1;
@@ -73,6 +73,12 @@ export function photoLayout(
   const zoomed = transform(base, 1 + (zoom - 1) / 2, pan * frameW * 0.5, frameW, frameH);
   const backdrop = transform(cover(photoW, photoH, frameW, frameH), 1.1, 0, frameW, frameH);
   return { opacity, backdrop, photo: zoomed };
+}
+
+/** Opacity of a photo at `progress` (0..1) through its stop: fade in, hold, fade out. */
+export function photoOpacity(progress: number): number {
+  const u = Math.min(1, Math.max(0, progress));
+  return smoothstep(Math.min(u / FADE, (1 - u) / FADE, 1));
 }
 
 /** Largest rect with the photo's aspect that fits inside w x h, centred. */
