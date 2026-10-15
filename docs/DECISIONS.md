@@ -374,6 +374,74 @@ video comes out longer than the target rather than flashing photos for a split s
 is the route's natural pace plus 4 s per photo, clamped to 15 s to 3 min. The preview uses
 exactly the same timing.
 
+## Phase 5: Extras (October 2026)
+
+### D30. Terrain-aware camera from our own elevation data
+
+The problem from D15: on a descent, a ridge behind the hiker can sit between the chase camera and
+the marker and hide it, especially with terrain exaggeration.
+
+- `pitchProfile()` (pure, tested on synthetic ridges) checks, every ~20 m along the route, the
+  sight line from where MapLibre will put the camera (distance = 1.5 × viewport height at the
+  chase zoom, behind the smoothed heading) to the target, with a 25 m margin. It picks the
+  highest pitch ≤ 60° (in 2.5° steps, minimum 25°) from which the target is visible.
+- The raw pitch gets a ±500 m running minimum (tilt before the ridge, not at it) and a 300 m
+  Gaussian, so it changes at most ~0.5° per 10 m.
+- Heights come from **our own decoded Terrarium tiles** (`src/terrain/dem.ts`): one zoom level
+  (12, lowered until ≤ 64 tiles) over the route plus 6 km, decoded with
+  `colorSpaceConversion: 'none'` so the RGB stays data. We don't ask the live map
+  (`queryTerrainElevation`), because what it has loaded depends on where it has looked, so
+  preview and export could differ.
+- The preview starts with the plain camera and switches when the tiles arrive (usually under a
+  second). The exporter reuses the same heights, or loads them itself.
+
+On the sample hike at 1.5× exaggeration, the camera now tilts from 60° to 35° over the descent
+and the marker stays visible.
+
+### D31. Privacy zone hides geometry, not the truth
+
+Points within the radius (200/500/1000 m) of the original start and finish are cut, up to the
+first point outside the zone. Everything _shown_ uses the cut route: map, timeline, photo
+placement, colours. Live stats and the profile use the full activity plus a distance offset,
+and the end card uses the full totals, so hiding home does not falsify numbers. Photos whose GPS
+lies inside a zone are left out with the reason shown, and highlights inside a zone are dropped.
+If the whole route is inside the zone, nothing is cut and the UI says so.
+
+### D32. Colouring by speed, heart rate or elevation, at no per-frame cost
+
+Values are smoothed (speed over ±25 points, heart rate with a 5-sample rolling median, elevation
+as in D9) and mapped onto a blue→red ramp between their 5th and 95th percentiles, so one spike
+can't wash out the whole route. Colours are baked in once: a static `line-gradient` (≤ 256 stops
+on Mercator line-progress) for the faded route, and a per-dot colour property for the lit dots.
+Nothing changes per frame, so D14's 130 fps holds. Themes are four of our own palettes.
+
+### D33. Marker icons are our own drawings
+
+Six pictograms (runner, bike, hiker, skier, kayak, horse) are simple line drawings on a 24×24
+grid in `src/render/icons.ts`, drawn with `Path2D` onto the theme-coloured disc. They are not
+copied from any app or icon set. "Auto" picks one from the file's sport, and users can upload
+their own picture (circle-cropped). The marker is a symbol layer on the route-dots source,
+shown by feature-state, so it keeps D14's per-frame cost.
+
+### D34. Peaks and passes from OpenStreetMap; highlights from the track
+
+None of the free OpenFreeMap styles label summits, so we add a symbol layer on the
+OpenMapTiles `mountain_peak` source-layer (`peak`, `volcano`, `saddle` = passes; name and
+elevation; zoom 9+, sorted by `rank`). The satellite style gets the same vector source and the
+OpenFreeMap fonts, and its attribution now credits OpenStreetMap for the labels. Highlights are
+computed from the activity: the highest point (on smoothed elevation) and the fastest kilometre
+(two pointers over any 1 km stretch). Each gets a map label and a caption pill in the video while
+the flyover passes within 250 m.
+
+### D35. Music
+
+The user's own file is decoded with Web Audio (any format the browser supports). The preview
+plays it on an `<audio>` element that follows play, pause and scrubbing (re-synced when it
+drifts > 150 ms). For export, an `OfflineAudioContext` renders the exact soundtrack: looped to
+the video length, 1.5 s fade-in, 3 s fade-out, at the chosen volume. Mediabunny then encodes it as
+**AAC 192 kbit/s** (Opus where AAC can't be encoded, e.g. Firefox). The same `musicGain()`
+drives both, so they match.
+
 ### Dependency licenses (Phase 1)
 
 | Package                                    | License      | Use             |

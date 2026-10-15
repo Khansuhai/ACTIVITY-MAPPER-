@@ -6,7 +6,9 @@ browser. Free and open source: no account, no watermark, your files never leave 
 > Work in progress. Done so far: drop a GPX, TCX, FIT or KML file, plus your photos (JPEG or
 > HEIC), to get a smooth 3D flyover over real terrain that stops at each photo where it was taken,
 > with live stats and an elevation profile. Export it as an MP4 (16:9, 9:16 or 1:1, up to 4K at
-> 60 fps, no watermark). Extras and an Android app come next (see [PROMPT.md](PROMPT.md)).
+> 60 fps, no watermark), with your own music. Style it with colour themes, speed/heart-rate/
+> elevation colouring, activity icons, peak names and highlights, and a privacy zone around home.
+> An Android app comes next (see [PROMPT.md](PROMPT.md)).
 
 Video export needs WebCodecs: current Chrome or Edge (desktop or Android), Safari 26+, or Firefox
 130+ on desktop. Keep the tab visible while exporting.
